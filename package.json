@@ -1,0 +1,19 @@
+{
+  "name": "hermes-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hermes Agent browser extension and local native companion bridge",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run build --silent && node --test tests/*.test.mjs && python -m unittest discover -s companion/tests -v",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run build && npm run typecheck && npm test && npm audit --audit-level=low",
+    "package": "npm run check && python scripts/package.py"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.320",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.8.3"
+  }
+}

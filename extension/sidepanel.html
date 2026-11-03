@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hermes Browser</title>
+    <link rel="stylesheet" href="dist/sidepanel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-mark">H</div>
+      <div><strong>Hermes</strong><span>AGENT · NAVIGATEUR</span></div>
+      <button id="settings-toggle" class="icon-button" aria-label="Réglages" title="Réglages">⚙</button>
+    </header>
+    <section id="connection" class="connection pending"><i></i><span>Connexion au compagnon…</span><button id="reconnect" class="link-button">Réessayer</button></section>
+    <main>
+      <section id="settings" class="settings hidden">
+        <div class="section-heading"><div><p class="eyebrow">CONFIGURATION</p><h2>Connexion Hermes</h2></div></div>
+        <label>URL de l’API Hermes<input id="api-url" type="url" placeholder="http://127.0.0.1:8642" autocomplete="url" /></label>
+        <label>Clé API locale<input id="api-key" type="password" autocomplete="off" placeholder="API_SERVER_KEY" /></label>
+        <label>Profil modèle
+          <select id="route-mode"><option value="default">Profil par défaut de Hermes</option><option value="web">Session web — 0 token API</option></select>
+        </label>
+        <div id="provider-picker" class="provider-picker hidden">
+          <label>Fournisseur web<select id="provider-select"></select></label>
+          <label>Modèle web<input id="model-id" type="text" placeholder="par défaut du fournisseur" /></label>
+          <p class="hint">Dans Hermes, configure le fournisseur <code>hermes-browser</code>. Le navigateur doit rester ouvert pendant la génération.</p>
+        </div>
+        <button id="save-settings" class="primary small">Enregistrer la configuration</button>
+        <div class="section-heading provider-heading"><div><p class="eyebrow">SESSIONS WEB</p><h2>Fournisseurs</h2></div><button id="refresh-providers" class="link-button">Actualiser</button></div>
+        <div id="providers" class="providers"><p class="muted">Chargement…</p></div>
+        <p class="security-note">Les fournisseurs web utilisent ta session de navigateur. Respecte leurs quotas et conditions d’utilisation. La clé Hermes reste dans le stockage local de l’extension.</p>
+      </section>
+      <section id="conversation" class="conversation">
+        <div id="welcome" class="welcome">
+          <div class="welcome-orbit">✳</div>
+          <p class="eyebrow">TON AGENT PERSONNEL</p>
+          <h1>Que puis-je faire<br />pour toi ?</h1>
+          <p>Hermes orchestre les outils et conserve la session. Les fournisseurs web envoient la génération via un onglet déjà connecté.</p>
+          <div class="chips"><button data-prompt="Résume les possibilités de cette session.">Découvrir Hermes</button><button data-prompt="Aide-moi à organiser ma prochaine tâche.">Organiser une tâche</button></div>
+        </div>
+        <div id="messages" class="messages" aria-live="polite"></div>
+      </section>
+    </main>
+    <footer class="composer-wrap">
+      <div id="composer-hint" class="composer-hint">Les outils Hermes s’exécutent sur ton compagnon local.</div>
+      <form id="composer" class="composer">
+        <textarea id="prompt" rows="1" placeholder="Écris un message à Hermes…" aria-label="Message"></textarea>
+        <button id="send" type="submit" aria-label="Envoyer" title="Envoyer">↑</button>
+      </form>
+      <div class="footer-line"><span>Hermes reste maître des outils</span><button id="new-session" class="link-button">Nouvelle session</button></div>
+    </footer>
+    <script src="dist/sidepanel.js" type="module"></script>
+  </body>
+</html>
