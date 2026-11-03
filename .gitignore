@@ -12,6 +12,10 @@ __pycache__/
 .coverage
 /tests/.build/
 /release/
+
+# Ship the built MV3 entry points so a GitHub source archive can load extension/ directly.
+!extension/dist/
+!extension/dist/**
 .env
 .env.*
 !.env.example

@@ -34,7 +34,7 @@ npm run check
 npm run package
 ```
 
-`npm run package` exécute tous les contrôles puis crée `release/hermes-browser-chrome-0.1.0.zip` (archive Chrome, manifeste à la racine) et `release/hermes-browser-companion-0.1.0.zip` (compagnon, plugin Hermes et instructions). Les archives sont locales et ignorées par Git. Pour un essai de développement, dans `chrome://extensions`, activer le mode développeur, choisir **Charger l’extension non empaquetée** et sélectionner `extension/`. Pour un paquet Chrome, extraire l’archive extension dans un répertoire permanent et charger ce dossier décompressé. Copier l’identifiant Chrome affiché, puis enregistrer le compagnon :
+`npm run package` exécute tous les contrôles puis crée `release/hermes-browser-chrome-0.1.0.zip` (archive Chrome, manifeste à la racine) et `release/hermes-browser-companion-0.1.0.zip` (compagnon, plugin Hermes et instructions). Ces archives sont générées localement et ignorées par Git. Les bundles de `extension/dist/` sont toutefois suivis dans Git afin que l’archive **Code → Download ZIP** soit directement chargeable. Après modification du code, reconstruire avec `npm ci && npm run build`. Dans `chrome://extensions`, activer le mode développeur, choisir **Charger l’extension non empaquetée** et sélectionner `extension/` (ou le dossier `extension/` de l’archive Chrome). Copier l’identifiant Chrome affiché, puis enregistrer le compagnon :
 
 ```sh
 python companion/install.py --extension-id <32-caracteres-id-chrome>
