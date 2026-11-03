@@ -1,0 +1,5 @@
+name: hermes-browser
+kind: model-provider
+version: 0.1.0
+description: Hermes Browser session relay (OpenAI-compatible local provider)
+author: Hermextent
