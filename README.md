@@ -31,6 +31,13 @@ The local API accepts model IDs in the form `provider-id:model-id`. The current 
 - Google Chrome or Microsoft Edge installed. Playwright Core controls the installed browser; this project does not download a separate browser.
 - A user account/session on whichever provider site you want to use.
 
+## Troubleshooting
+
+- **“Origine de l’interface locale refusée”** — the dashboard and the gateway must be the same version and the same host. Open `http://127.0.0.1:20128` exactly (not `localhost`, not a proxied preview URL), stop any older gateway with Ctrl+C, and confirm the version badge matches the archive you run. The refusal message now names both origins.
+- **No browser window opens** — Chrome/Edge was not found. Install it, or set `HERMES_BROWSER_EXECUTABLE` to the full `chrome.exe`/`msedge.exe` path and restart the gateway. The gateway never downloads a browser.
+- **A provider says the session is unverified** — sign in inside the dedicated window, keep it open, then refresh the dashboard. The cookie indicator is only a heuristic.
+- **Requests fail with a provider error** — the website protocol may have changed, or the account may not have access to that model. Report the exact message; nothing is silently retried with another provider.
+
 ## Install and run on Windows
 
 Extract this project to a permanent folder. Open PowerShell in that folder and run:
@@ -42,6 +49,8 @@ npm run gateway
 ```
 
 The installer copies the Hermes provider profile and preserves or creates a local bearer credential in Hermes `.env`; it never prints the credential. Restart Hermes Agent/Desktop after installation so it loads the provider profile. Keep the project folder in place while running the gateway. If Chrome is installed in a nonstandard location, set `HERMES_BROWSER_EXECUTABLE` to its executable path before starting the gateway.
+
+Always run `npm run gateway` from the folder you just extracted, so the gateway code matches the dashboard you open. The dashboard shows its version next to the title and `/health` reports the same `version`; if those differ from the archive you downloaded, an older gateway is still running or the files were not replaced.
 
 Open `http://127.0.0.1:20128` in your normal browser. Choose **Ouvrir la session web** for a provider. The gateway opens its dedicated browser window; sign in there. The dedicated profile is stored under `$HOME\.hermes\browser-sessions` (on Windows, usually `C:\Users\<you>\.hermes\browser-sessions`). Repeat for any other provider. Keep the gateway running while Hermes uses it.
 

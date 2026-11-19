@@ -91,12 +91,22 @@ export class BrowserSessions {
       const userDataDir = path.join(this.hermesHome, 'browser-sessions');
       await mkdir(userDataDir, { recursive: true });
       const executablePath = await findBrowserExecutable();
-      const context = await chromium.launchPersistentContext(userDataDir, {
-        headless: false,
-        ...(executablePath ? { executablePath } : { channel: process.platform === 'linux' ? 'chromium' : 'chrome' }),
-        args: ['--no-first-run', '--no-default-browser-check'],
-        viewport: null,
-      });
+      let context;
+      try {
+        context = await chromium.launchPersistentContext(userDataDir, {
+          headless: false,
+          ...(executablePath ? { executablePath } : { channel: process.platform === 'linux' ? 'chromium' : 'chrome' }),
+          args: ['--no-first-run', '--no-default-browser-check'],
+          viewport: null,
+        });
+      } catch (error) {
+        this.launchPromise = undefined;
+        const message = String(error?.message || error);
+        if (/Executable doesn.t exist|is not found|no such file/i.test(message)) {
+          throw new Error('Chrome ou Edge est introuvable. Installe Google Chrome ou Microsoft Edge, ou définis HERMES_BROWSER_EXECUTABLE avec le chemin complet du navigateur, puis relance npm run gateway.');
+        }
+        throw new Error(`Ouverture du navigateur dédié impossible : ${message.split('\n')[0]}`);
+      }
       this.context = context;
       context.on('close', () => {
         this.context = undefined;
@@ -154,6 +164,7 @@ export class BrowserSessions {
     if (!plugin) throw new Error(`Fournisseur inconnu : ${providerId}`);
     const { page } = await this.#getPage(plugin.definition);
     await page.bringToFront();
+    console.log(`[session] Fenêtre ${plugin.definition.id} ouverte sur ${plugin.definition.loginUrl}`);
     return { id: providerId, url: plugin.definition.loginUrl };
   }
 

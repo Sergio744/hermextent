@@ -52,6 +52,7 @@ test('local router serves health/models, requires bearer auth, and exposes no se
 
   const health = await (await fetch(`${base}/health`)).json();
   assert.equal(health.ok, true);
+  assert.equal(health.version, '0.3.0');
   assert.equal(health.providerCount, 11);
 
   const denied = await fetch(`${base}/v1/models`);
@@ -81,6 +82,7 @@ test('local router serves health/models, requires bearer auth, and exposes no se
     body: JSON.stringify({ providerId: 'unknown-provider' }),
   });
   assert.equal(sameOriginLogin.status, 400, 'the exact local Origin should reach provider validation without a custom marker header');
+  assert.match((await sameOriginLogin.json()).error.message, /Fournisseur inconnu/);
   assert.equal((await (await fetch(`${base}/health`)).json()).browserStarted, false);
 
   const forgedLogin = await fetch(`${base}/api/login`, {
@@ -89,6 +91,8 @@ test('local router serves health/models, requires bearer auth, and exposes no se
     body: JSON.stringify({ providerId: 'gemini-web' }),
   });
   assert.equal(forgedLogin.status, 403);
+  assert.match((await forgedLogin.json()).error.message, /Origine refusée/);
+  assert.equal((await (await fetch(`${base}/health`)).json()).browserStarted, false, 'a refused origin must never launch a browser');
   assert.equal(output.includes(token), false, 'local gateway credential must never appear in process logs');
 
   const persisted = await readFile(path.join(home, '.env'), 'utf8');
