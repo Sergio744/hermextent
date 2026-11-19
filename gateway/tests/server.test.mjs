@@ -75,9 +75,17 @@ test('local router serves health/models, requires bearer auth, and exposes no se
   assert.equal(invalidModel.status, 404);
   assert.equal((await (await fetch(`${base}/health`)).json()).browserStarted, false, 'invalid models must not launch a browser');
 
+  const sameOriginLogin = await fetch(`${base}/api/login`, {
+    method: 'POST',
+    headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId: 'unknown-provider' }),
+  });
+  assert.equal(sameOriginLogin.status, 400, 'the exact local Origin should reach provider validation without a custom marker header');
+  assert.equal((await (await fetch(`${base}/health`)).json()).browserStarted, false);
+
   const forgedLogin = await fetch(`${base}/api/login`, {
     method: 'POST',
-    headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json', 'X-Hermes-Local-UI': '1' },
+    headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
     body: JSON.stringify({ providerId: 'gemini-web' }),
   });
   assert.equal(forgedLogin.status, 403);

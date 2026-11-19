@@ -332,7 +332,7 @@ function localUiHtml() {
     :root{color-scheme:dark;font:15px system-ui;background:#0b1020;color:#e8edf8}body{max-width:850px;margin:48px auto;padding:0 20px}h1{font-size:28px;margin-bottom:8px}p{color:#aab6cc;line-height:1.5}.hint{padding:14px 16px;border:1px solid #293650;border-radius:12px;background:#111a2d;margin:22px 0}article{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:15px 0;border-bottom:1px solid #24304a}small{display:block;color:#96a7c4;margin-top:5px}button{border:0;border-radius:8px;padding:10px 14px;background:#6f8cff;color:#081126;font-weight:700;cursor:pointer}button:hover{background:#91a6ff}.status{font-size:13px;color:#9baac3}.ok{color:#63d6a0}@media(max-width:650px){article{grid-template-columns:1fr auto}.status{grid-column:1/-1}}
     </style><body><h1>Hermes Web Gateway</h1><p>Passerelle locale pour utiliser les sessions web connectées, sans extension Chrome et sans clé API fournisseur.</p><div class="hint"><strong>Connexion locale seulement.</strong> Le navigateur ouvert par le gateway utilise un profil séparé enregistré dans le dossier Hermes. Connecte-toi aux sites depuis cette fenêtre; les sessions sont conservées localement.</div><section>${entries}</section><script>
       async function refresh(){try{const r=await fetch('/api/providers');if(!r.ok)return;const items=await r.json();for(const p of items){const el=document.getElementById('s-'+p.id);if(el){el.textContent=p.authenticated?'Indice de cookie présent':'Aucun cookie indicateur détecté';el.className='status'+(p.authenticated?' ok':'')}}}catch{}}
-      document.querySelectorAll('button[data-provider]').forEach(button=>button.addEventListener('click',async()=>{button.disabled=true;try{const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','X-Hermes-Local-UI':'1'},body:JSON.stringify({providerId:button.dataset.provider})});const value=await response.json();if(!response.ok)alert(value.error?.message||'Impossible d’ouvrir la session')}catch(e){alert(String(e))}finally{button.disabled=false;refresh()}}));refresh();setInterval(refresh,5000);
+      document.querySelectorAll('button[data-provider]').forEach(button=>button.addEventListener('click',async()=>{button.disabled=true;try{const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({providerId:button.dataset.provider})});const value=await response.json();if(!response.ok)alert(value.error?.message||'Impossible d’ouvrir la session')}catch(e){alert(String(e))}finally{button.disabled=false;refresh()}}));refresh();setInterval(refresh,5000);
     </script></body></html>`;
 }
 
@@ -356,9 +356,11 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url.pathname === '/api/login') {
     const origin = req.headers.origin;
-    if (!['http://127.0.0.1:20128', `http://127.0.0.1:${DEFAULT_PORT}`, `http://localhost:${DEFAULT_PORT}`].includes(origin) || req.headers['x-hermes-local-ui'] !== '1') {
-      return sendError(res, 403, 'Origine de l’interface locale refusée.');
-    }
+    let sameLocalOrigin = false;
+    try {
+      sameLocalOrigin = typeof origin === 'string' && new URL(origin).origin === new URL(`http://${req.headers.host}`).origin;
+    } catch { /* malformed or missing Origin */ }
+    if (!sameLocalOrigin) return sendError(res, 403, 'Origine de l’interface locale refusée.');
     try {
       const body = await readJson(req);
       const opened = await sessions.openLogin(String(body.providerId || ''));
