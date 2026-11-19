@@ -1,28 +1,28 @@
-# Matrice de capacité — Hermes Browser 0.1.0
+# Matrice des capacités — Hermes Web Gateway 0.2.0
 
-Dernière mise à jour : 3 novembre 2026. « Implémenté » signifie présent dans le code; « test synthétique » n’équivaut jamais à une validation en conditions réelles.
+Mis à jour : 3 novembre 2026. « Implémenté » décrit le code présent, pas une validation réelle auprès d’un fournisseur.
 
-| Capacité | État dans 0.1.0 | Preuve actuelle / limite |
+| Capacité | État | Preuve et limites |
 |---|---|---|
-| Runtime et exécution des outils Hermes | Hermes Agent reste le runtime; le panneau utilise son API locale. Le relais convertit des tool calls web en format OpenAI pour que Hermes les exécute. | Parsers et contrat du relais testés synthétiquement; aucun vrai tour d’outil avec Hermes n’a été exécuté ici. |
-| Fournisseurs web « 0 token API » | Les 11 adaptateurs ChromeClaw sont intégrés et sélectionnables. | Chaque builder construit une requête HTTPS avec une session factice; aucune session connectée ni génération réelle validée. Quotas, abonnements et règles fournisseurs restent applicables. |
-| Texte et flux | Chat texte, streaming SSE et erreurs. | Formats du relais testés localement; panneau rendu dans Chromium headless avec `chrome.*` simulé. Aucun vrai service worker, extension installée ou Hermes réel. |
-| Sessions Hermes | `X-Hermes-Session-Id` et `X-Hermes-Session-Key` sont conservés et relayés. | En-têtes testés par doubles HTTP; reprise de session réelle non vérifiée. |
-| Annulation | Bouton d’arrêt, fermeture du client HTTP, annulation du relais et signal AbortController vers l’endpoint web. Les requêtes vers le même site sont sérialisées pour éviter les collisions du hook `fetch`. | Tests par unité et disconnect HTTP; propagation dans Chrome et auprès de chaque fournisseur non vérifiée. |
-| Authentification des sessions web | Lecture heuristique des cookies; les hooks de rafraîchissement présents dans les plugins sont appelés quand disponibles. | Les badges indiquent un indice de session, pas un compte validé. Certains fournisseurs conservent leurs jetons en localStorage ou utilisent des challenges privés. |
-| Approbations sensibles / demandes d’autorisation | Pas d’interface dédiée au panneau. | Utiliser le flux Hermes CLI/Gateway tant qu’une surface d’approbation navigateur n’a pas été conçue et testée. |
-| Tâches longues / notifications / exécutions en arrière-plan | Non exposées par le side panel 0.1.0. | Restent dans les surfaces Hermes existantes; aucun faux support revendiqué. |
-| Fichiers, pièces jointes, images, audio/voix | Le compositeur 0.1.0 ne prend en charge que du texte. | Non exposés ni testés dans le panneau. |
-| Gestion des skills, profils, toolsets et configurations Hermes | Pas d’éditeur dans l’extension. | Le runtime Hermes installé séparément reste l’autorité; configuration via ses outils/CLI. |
-| Installation Chrome + compagnon | Archives zip, manifeste MV3, hôte Python, installateur et désinstalleur. | Cycle CLI d’installation/mise à jour/désinstallation testé sur Linux temporaire; plugin découvert par le `providers.get_provider_profile` Hermes officiel et alias vérifié. Windows/macOS, serveur Hermes réel et chargement Chrome restent à tester. |
-| Sécurité locale | Native Messaging, hôte loopback, bearer token aléatoire, validation des URLs/redirects Hermes, limite de concurrence. | Tests unitaires; audit système complet, vérification de permissions en vrai navigateur et revue sécurité indépendante non réalisés. |
+| Routeur API local | Implémenté | Endpoints OpenAI-compatible `/v1/models` et `/v1/chat/completions`; tests locaux avec profil Hermes temporaire. Aucun essai Hermes Desktop réel. |
+| Utilisation sans clé API fournisseur | Architecture implémentée | Le navigateur dédié utilise les sessions de sites web connectées. Le bearer token de la passerelle est un secret local d’authentification, pas une clé API d’un fournisseur. Les comptes, quotas et politiques des sites s’appliquent. |
+| Navigateur dédié sans extension | Implémenté | Playwright Core ouvre Chrome/Edge avec profil persistant isolé sous Hermes home. Login réel, démarrage sur chaque OS et compatibilité anti-automation non testés ici. |
+| Fournisseurs web | 11 adapters présents | chatgpt-web, claude-web, deepseek-web, doubao-web, gemini-web, glm-web, glm-intl-web, kimi-web, qwen-cn-web, qwen-web, rakuten-web. Builders/adapters testés avec données synthétiques; aucun endpoint live validé. |
+| Sessions | Gestion locale par profil browser | Le dashboard signale seulement des cookies indicateurs heuristiques. Un badge ne prouve pas l’authentification réelle; certains sites utilisent localStorage ou autres challenges. |
+| Streaming texte | Implémenté dans le chemin OpenAI-compatible | Parseurs/adapters synthétiques et contrats HTTP testés. Aucun flux live fournisseur ni vrai client Hermes testé. |
+| Appels d’outils Hermes | Traduction XML ↔ OpenAI `tool_calls` présente | Parseurs/tests synthétiques réutilisés. Pas encore validé qu’un vrai Hermes exécute une séquence tool call → résultat → continuation via ce gateway. |
+| Annulation | Relais d’annulation vers la page en cours | Le handler de page peut recevoir `WEB_LLM_CANCEL`; couverture des handlers et propagation réelle fournisseur non vérifiées. |
+| Modèles et health | Liste issue des modèles par défaut déclarés; `/health` local | Les noms/modèles peuvent changer côté site. Le health du gateway ne vérifie pas l’authentification fournisseur ni une génération. |
+| Authentification locale | Loopback uniquement, bearer token, vérification Host et Origin sur actions de login | Tests HTTP négatifs/positifs et absence de secret dans les logs. Permissions Windows/ACL et audit sécurité indépendant non vérifiés. |
+| Fonctionnalités Hermes hors inférence | Fournies par Hermes installé séparément | Le gateway n’implémente pas approvals, skills, tâches longues, pièces jointes, image, audio, mémoire Hermes ou exécution d’outils; il transporte seulement la requête/réponse de modèle. |
+| Ancienne extension et Native Messaging | Conservées comme chemin legacy expérimental | Non nécessaires pour le gateway principal. Les deux routes ne doivent pas être confondues : extension/Native Messaging port 8765 vs gateway local port 20128. |
 
-## Critères de sortie de préversion
+## Conditions de sortie de préversion
 
-1. Charger l’extension et installer le compagnon dans une installation Hermes supportée sur chaque OS annoncé.
-2. Valider plugin/profile discovery via l’installation Hermes complète, sans stubs.
-3. Pour chaque fournisseur : login, session expirée/rafraîchie, vraie génération, streaming, erreur réseau et annulation.
-4. Avec Hermes réel : reprendre une session, faire exécuter puis retourner un outil et vérifier que l’appel n’est exécuté qu’une fois; tester également outils refusés/approbations.
-5. Tester messages longs, caractères Unicode, demandes parallèles, fermeture de panneau et redémarrage du service worker.
-6. Vérifier permissions Chrome, stockage des clés, scénario de désinstallation et politiques de chaque fournisseur; publier le résultat par OS/fournisseur.
-7. Décider explicitement quels parcours Hermes supplémentaires (images, pièces jointes, tâches, approvals, skills) seront livrés dans l’extension et lesquels resteront dans le CLI/Gateway.
+1. Tester installation du profil, lancement Chrome/Edge et persistance des sessions sur Windows, macOS et Linux annoncés.
+2. Pour chaque fournisseur : login, état session expirée, génération réelle, streaming, erreurs, déconnexion et annulation.
+3. Avec une vraie installation Hermes : charger le profil officiel, réaliser une génération non-streaming et streaming, vérifier un outil réellement appelé une seule fois puis une continuation à partir de son résultat.
+4. Tester les requêtes longues, caractères Unicode, demandes parallèles, fermeture du navigateur pendant le streaming et redémarrage du gateway.
+5. Vérifier la protection locale du profil de navigation et du fichier `.env`; effectuer une revue sécurité indépendante.
+6. Documenter séparément les essais réels par fournisseur/OS. Ne pas extrapoler un succès d’un fournisseur aux autres.
+7. Vérifier les politiques applicables de chaque site; ne pas contourner paywalls, quotas ou challenges.

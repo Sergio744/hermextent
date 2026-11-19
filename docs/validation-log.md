@@ -2,6 +2,18 @@
 
 Date : 3 novembre 2026. Les essais ci-dessous ont été faits localement dans le workspace; ils n’établissent pas une validation de production.
 
+## Hermes Web Gateway 0.2.0 — tests du routeur local
+
+- Ajout d’un serveur Node OpenAI-compatible sur `127.0.0.1:20128`, d’un profil de session Playwright isolé et d’un dashboard localhost pour ouvrir les pages de login.
+- `npm test` valide le build des fournisseurs, les 11 IDs, les builders/adapters déjà testés, l’authentification bearer locale, les routes models/health, la liste de fournisseurs et le refus d’une origine web étrangère sur `/api/login`. Les tests gateway utilisent un `$HERMES_HOME` temporaire et ne lancent pas de navigateur.
+- Les 11 handlers/providers sont inclus dans le bundle Node/browser-context. Cela ne valide pas que la fonction injectée démarre sous la CSP actuelle d’un site ou que les protocoles privés acceptent les requêtes.
+- **Aucun lancement Playwright réel, aucune connexion fournisseur, aucune génération réelle, aucun appel Hermes Desktop ni outil Hermes complet n’a été exécuté.** Le système demeure expérimental et les fournisseurs ne sont pas validés.
+- Le profil peut utiliser `HERMEXTENT_BRIDGE_TOKEN` comme mot de passe local API; sa valeur n’est jamais affichée par l’installateur ni le serveur.
+
+## Historique de l’architecture Chrome-extension
+
+Les essais Chrome/Chromium et l’intégration Native Messaging ci-dessous concernent l’ancienne architecture conservée comme chemin legacy. Ils ne valident pas le nouveau routeur Playwright.
+
 ## Hermes Agent — découverte du plugin
 
 - Source officielle : `NousResearch/hermes-agent`, commit `c314285f077e91937c995d419b9fa40af9eb4981`.

@@ -1,64 +1,64 @@
 #!/usr/bin/env python3
-"""Create reproducible-ish Chrome and local companion release archives after a successful build."""
+"""Package the complete Hermes Web Gateway source tree without local secrets/build caches."""
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "release"
-
-
-def add_file(archive: zipfile.ZipFile, path: Path, archive_name: str) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing release input: {path}; run npm run build first")
-    archive.write(path, archive_name)
+EXCLUDED_DIRS = {
+    ".git", ".research", ".venv", "node_modules", "release", "__pycache__",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage", "target", "build",
+}
+EXCLUDED_FILES = {".env", ".coverage"}
 
 
 def main() -> int:
-    manifest = json.loads((ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
-    version = manifest["version"]
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    version = package["version"]
     RELEASE.mkdir(parents=True, exist_ok=True)
-    extension_zip = RELEASE / f"hermes-browser-chrome-{version}.zip"
-    companion_zip = RELEASE / f"hermes-browser-companion-{version}.zip"
+    output = RELEASE / f"hermes-web-gateway-{version}.zip"
+    prefix = "hermes-web-gateway/"
 
-    with zipfile.ZipFile(extension_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        add_file(archive, ROOT / "extension" / "manifest.json", "manifest.json")
-        add_file(archive, ROOT / "extension" / "sidepanel.html", "sidepanel.html")
-        for name in ("background.js", "sidepanel.js", "sidepanel.css"):
-            add_file(archive, ROOT / "extension" / "dist" / name, f"dist/{name}")
-        add_file(archive, ROOT / "extension" / "src" / "background" / "web-providers" / "UPSTREAM-LICENSE", "THIRD_PARTY_CHROMECLAW_LICENSE.txt")
-        add_file(archive, ROOT / "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md")
-        add_file(archive, ROOT / "third_party" / "HERMES-AGENT-LICENSE", "THIRD_PARTY_HERMES_LICENSE.txt")
-        add_file(archive, ROOT / "LICENSE", "LICENSE")
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for directory, subdirs, filenames in os.walk(ROOT):
+            current = Path(directory)
+            relative_dir = current.relative_to(ROOT)
+            subdirs[:] = [name for name in subdirs if name not in EXCLUDED_DIRS]
+            if relative_dir == Path("tests"):
+                subdirs[:] = [name for name in subdirs if name != ".build"]
+            if relative_dir == Path("gateway"):
+                subdirs[:] = [name for name in subdirs if name != "dist"]
+            for filename in filenames:
+                path = current / filename
+                relative = path.relative_to(ROOT)
+                if filename in EXCLUDED_FILES or filename.endswith(".pyc") or filename.endswith(".log"):
+                    continue
+                if filename.startswith(".env.") and filename != ".env.example":
+                    continue
+                if relative.parts[:2] == ("tests", ".build"):
+                    continue
+                if relative.parts[:2] == ("gateway", "dist"):
+                    continue
+                archive.write(path, prefix + relative.as_posix())
+        archive.writestr(prefix + "INSTALL.txt", (
+            "Hermes Web Gateway installation\n"
+            "1. Install Node.js 22+ and npm, Hermes Agent, and Chrome or Edge.\n"
+            "2. Extract this archive and open a terminal in its hermes-web-gateway directory.\n"
+            "3. Run npm ci.\n"
+            "4. Run: py -3 gateway/install.py --hermes-home <your Hermes home> (Windows)\n"
+            "   or python3 gateway/install.py (macOS/Linux).\n"
+            "5. Restart Hermes, then run: npm run gateway.\n"
+            "6. Open http://127.0.0.1:20128 and sign in from the dedicated browser window.\n"
+            "The bearer credential is stored in Hermes .env and must remain private. No extension/native host is required.\n"
+        ))
 
-    with zipfile.ZipFile(companion_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        add_file(archive, ROOT / "README.md", "README.md")
-        add_file(archive, ROOT / "docs" / "capability-matrix.md", "docs/capability-matrix.md")
-        add_file(archive, ROOT / "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md")
-        add_file(archive, ROOT / "third_party" / "HERMES-AGENT-LICENSE", "THIRD_PARTY_HERMES_LICENSE.txt")
-        add_file(archive, ROOT / "LICENSE", "LICENSE")
-        for path in (ROOT / "companion").glob("*.py"):
-            add_file(archive, path, path.relative_to(ROOT).as_posix())
-        for path in (ROOT / "plugins" / "model-providers" / "hermes-browser").rglob("*"):
-            if path.is_file():
-                add_file(archive, path, path.relative_to(ROOT).as_posix())
-        instructions = (
-            "Hermes Browser companion installation\n"
-            "1. Extract this archive into a permanent directory. Do not move it after registering Native Messaging.\n"
-            "2. Install Hermes Agent and enable its API server on loopback with API_SERVER_KEY.\n"
-            "3. Load the Hermes Browser Chrome extension and copy its id from chrome://extensions.\n"
-            "4. Run: python companion/install.py --extension-id <chrome-extension-id>\n"
-            "5. Restart Hermes, open the extension side panel, and choose Settings.\n"
-            "6. Unregister with: python companion/uninstall.py --browser chrome. Add --remove-plugin --remove-token for optional profile cleanup.\n"
-        )
-        archive.writestr("INSTALL.txt", instructions)
-
-    for path in (extension_zip, companion_zip):
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        print(f"{path.relative_to(ROOT)}  {path.stat().st_size} bytes  sha256:{digest}")
+    digest = hashlib.sha256(output.read_bytes()).hexdigest()
+    print(f"{output.relative_to(ROOT)}  {output.stat().st_size} bytes  sha256:{digest}")
     return 0
 
 

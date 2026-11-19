@@ -8,10 +8,16 @@
 - Modules repris/adaptés : définitions et stratégies de fournisseurs web, adaptateurs de flux, analyseurs SSE/XML et handlers de fetch de page sous `extension/src/background/web-providers/`.
 - Texte intégral de l’avis : `extension/src/background/web-providers/UPSTREAM-LICENSE`.
 
+## Playwright Core — automatisation du navigateur local
+
+- Paquet : <https://www.npmjs.com/package/playwright-core>
+- Licence : Apache-2.0; texte redistribué dans `third_party/PLAYWRIGHT-CORE-LICENSE`.
+- Utilisé pour piloter Chrome/Edge avec un profil de navigateur dédié. Le projet n’intègre ni ne télécharge le binaire du navigateur.
+
 ## Hermes Agent — runtime et extension de fournisseur
 
 - Source : <https://github.com/NousResearch/hermes-agent>
 - Révision étudiée : `c314285f077e91937c995d419b9fa40af9eb4981`.
 - Licence : MIT ; copyright `2025 Nous Research`.
 - Le plugin `plugins/model-providers/hermes-browser/` utilise le point d’extension public `ProviderProfile` documenté par Hermes. L’extension n’embarque pas une copie du runtime Hermes ; l’utilisateur installe ce dernier séparément.
-- Le texte intégral de l’avis MIT Hermes est redistribué dans `third_party/HERMES-AGENT-LICENSE` et inclus dans les deux archives.
+- Le texte intégral de l’avis MIT Hermes est redistribué dans `third_party/HERMES-AGENT-LICENSE` et doit être inclus dans les archives de distribution.

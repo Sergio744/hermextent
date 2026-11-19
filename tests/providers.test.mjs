@@ -88,22 +88,34 @@ test('annulation page interrompt le fetch fournisseur ciblé et restaure fetch',
   const originalWindow = globalThis.window;
   const listeners = new Set();
   const calls = [];
+  const sockets = [];
   const originalFetch = async (_input, init) => { calls.push(init); return new Response('ok'); };
+  class MockWebSocket {
+    constructor(url) { this.url = url; this.closeCalls = 0; sockets.push(this); }
+    addEventListener() {}
+    close() { this.closeCalls++; }
+  }
   globalThis.window = {
     location: { origin: 'https://gemini.google.com' },
     fetch: originalFetch,
+    WebSocket: MockWebSocket,
     addEventListener: (_type, callback) => listeners.add(callback),
     removeEventListener: (_type, callback) => listeners.delete(callback),
   };
   try {
-    installPageRequestCancellation('cancel-me', 'https://gemini.google.com/api/generate');
+    installPageRequestCancellation({ requestId: 'cancel-me', requestUrl: 'https://gemini.google.com/api/generate', additionalUrls: ['https://gemini.google.com/api/setup', 'wss://gemini.google.com/ws'] });
     await window.fetch('/api/generate');
     assert.equal(calls[0].signal.aborted, false);
     await window.fetch('/other');
     assert.equal(calls[1], undefined);
+    await window.fetch('/api/setup');
+    assert.equal(calls[2].signal.aborted, false);
+    const socket = new window.WebSocket('wss://gemini.google.com/ws');
     for (const listener of listeners) listener({ source: window, origin: window.location.origin, data: { type: 'WEB_LLM_CANCEL', requestId: 'cancel-me' } });
     assert.equal(calls[0].signal.aborted, true);
+    assert.equal(socket.closeCalls, 1);
     assert.equal(window.fetch, originalFetch);
+    assert.equal(window.WebSocket, MockWebSocket);
     assert.equal(listeners.size, 0);
   } finally {
     if (originalWindow === undefined) delete globalThis.window;

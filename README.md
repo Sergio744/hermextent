@@ -1,48 +1,55 @@
-# Hermes Browser
+# Hermes Web Gateway
 
-Extension Chrome MV3 + compagnon **Chrome Native Messaging** pour piloter le runtime officiel Hermes Agent. Le compagnon fournit une passerelle OpenAI-compatible authentifiée vers les modèles web et relaie l’API Hermes sans que le JavaScript de l’extension n’appelle `localhost` directement.
+**Hermes Web Gateway** is a local OpenAI-compatible router for Hermes Agent. Instead of installing a Hermes extension in Chrome and connecting it with Native Messaging, it opens a dedicated, persistent browser profile and uses the web sessions you sign into there. No provider API key is required; normal provider account limits, plans, policies, and website changes still apply.
 
-> **État : préversion empaquetable, non validée pour la production.** Le panneau, les 11 adaptateurs issus de ChromeClaw, le pont natif, la passerelle Hermes, l’annulation des générations et des archives d’installation sont présents. Les requêtes de chaque adaptateur sont vérifiées statiquement et les tests automatisés passent; aucun fournisseur, navigateur ni cycle Hermes complet n’a encore été validé en conditions réelles. Ne pas considérer les fournisseurs comme opérationnels sans essai sur leurs sessions web actuelles.
+> **Status: experimental preview, not production-validated.** The local gateway, browser-session manager, Hermes provider profile, and adapters for 11 web providers are implemented. Automated tests cover the local HTTP contract and adapter logic. No provider website, Playwright-controlled login, real Hermes runtime, or end-to-end generation has yet been validated in a real user environment. Do not assume any provider works until it is tested.
 
-## Architecture du prototype
+## Architecture
 
 ```text
-Extension Chrome (side panel + service worker)
-  ├─ Hermes API (/v1/chat/completions, port natif)
-  └─ événements fournisseur web ← Native Messaging
-          ↑                                   ↓
-    Hermes Agent ← OpenAI Chat Completions → compagnon local
-                           127.0.0.1:8765/v1
+Hermes Agent
+   │ OpenAI-compatible request
+   ▼
+http://127.0.0.1:20128/v1  — local Hermes Web Gateway
+   │ authenticated localhost API
+   ▼
+Playwright-controlled Chrome/Edge profile
+   │ signed-in website session; provider-specific web request
+   ▼
+Provider website
 ```
 
-Le runtime Hermes reste responsable de son agent et de ses outils. Le profil `hermes-browser` pointe vers le relais local ; son modèle s’écrit `gemini-web:<model-id>` ou avec l’un des dix autres identifiants. L’extension fait la génération dans un onglet déjà connecté et restitue texte/appels d’outils au format OpenAI Chat Completions.
+The gateway is a local Node.js process. It launches Chrome or Edge with a **separate profile** under the Hermes home directory, so you sign in once in that window and the session persists there. It does not reuse or copy cookies from your normal Chrome profile. The Chrome extension, Native Messaging host, and Hermes API server are not required for this route.
 
-Les identifiants ciblés sont `chatgpt-web`, `claude-web`, `deepseek-web`, `doubao-web`, `gemini-web`, `glm-web`, `glm-intl-web`, `kimi-web`, `qwen-cn-web`, `qwen-web` et `rakuten-web`. Les schémas/adaptateurs sont importés de ChromeClaw et sa notice MIT est conservée. Les sites utilisent des protocoles web non contractuels, susceptibles de changer.
+The local API accepts model IDs in the form `provider-id:model-id`. The current adapter set is `chatgpt-web`, `claude-web`, `deepseek-web`, `doubao-web`, `gemini-web`, `glm-web`, `glm-intl-web`, `kimi-web`, `qwen-cn-web`, `qwen-web`, and `rakuten-web`. These adapters use unofficial website protocols that can change at any time. A cookie indicator in the dashboard is only a heuristic; it does not prove a valid account or successful inference.
 
-## Prérequis du prototype
+## Requirements
 
-- Chrome 116 ou plus récent, profil utilisateur connecté chez le fournisseur web.
-- Python 3.11+.
-- Hermes Agent installé et son API serveur activée sur `127.0.0.1:8642`, avec `API_SERVER_KEY`.
-- Node.js 22+ pour construire l’extension.
+- Hermes Agent installed.
+- Node.js 22 or newer and npm.
+- Python 3.11+ for the profile installer.
+- Google Chrome or Microsoft Edge installed. Playwright Core controls the installed browser; this project does not download a separate browser.
+- A user account/session on whichever provider site you want to use.
 
-## Construire
+## Install and run on Windows
 
-```sh
+Extract this project to a permanent folder. Open PowerShell in that folder and run:
+
+```powershell
 npm ci
-npm run check
-npm run package
+py -3 .\gateway\install.py --hermes-home "$HOME\.hermes"
+npm run gateway
 ```
 
-`npm run package` exécute tous les contrôles puis crée `release/hermes-browser-chrome-0.1.0.zip` (archive Chrome, manifeste à la racine) et `release/hermes-browser-companion-0.1.0.zip` (compagnon, plugin Hermes et instructions). Ces archives sont générées localement et ignorées par Git. Les bundles de `extension/dist/` sont toutefois suivis dans Git afin que l’archive **Code → Download ZIP** soit directement chargeable. Après modification du code, reconstruire avec `npm ci && npm run build`. Dans `chrome://extensions`, activer le mode développeur, choisir **Charger l’extension non empaquetée** et sélectionner `extension/` (ou le dossier `extension/` de l’archive Chrome). Copier l’identifiant Chrome affiché, puis enregistrer le compagnon :
+The installer copies the Hermes provider profile and preserves or creates a local bearer credential in Hermes `.env`; it never prints the credential. Restart Hermes Agent/Desktop after installation so it loads the provider profile. Keep the project folder in place while running the gateway. If Chrome is installed in a nonstandard location, set `HERMES_BROWSER_EXECUTABLE` to its executable path before starting the gateway.
 
-```sh
-python companion/install.py --extension-id <32-caracteres-id-chrome>
-```
+Open `http://127.0.0.1:20128` in your normal browser. Choose **Ouvrir la session web** for a provider. The gateway opens its dedicated browser window; sign in there. The dedicated profile is stored under `$HOME\.hermes\browser-sessions` (on Windows, usually `C:\Users\<you>\.hermes\browser-sessions`). Repeat for any other provider. Keep the gateway running while Hermes uses it.
 
-`--browser chromium` et `--browser brave` sélectionnent leurs répertoires Native Messaging. L’installateur installe le profil Hermes sous `$HERMES_HOME/plugins/model-providers/hermes-browser`, crée un secret aléatoire dans `$HERMES_HOME/.env` avec permissions restreintes et enregistre le Native Messaging host. Redémarrer Hermes après installation. Ouvrir le side panel pour lancer le compagnon. Pour désenregistrer Native Messaging : `python companion/uninstall.py --browser chrome`; ajouter `--remove-plugin --remove-token` pour nettoyer uniquement les fichiers du plugin identiques à ceux livrés et la variable dédiée, en préservant les personnalisations et le reste de `.env`.
+On Linux/macOS, run `npm ci`, `python3 gateway/install.py`, then `npm run gateway`; the gateway tries to locate Chrome/Edge. Set `HERMES_BROWSER_EXECUTABLE` if auto-detection does not find your browser.
 
-Configurer Hermes (exemple) :
+## Configure Hermes
+
+The installer places the `hermes-browser` provider profile in the Hermes home directory. Select it in Hermes, for example:
 
 ```yaml
 model:
@@ -50,25 +57,55 @@ model:
   model: gemini-web:gemini-3-flash
 ```
 
-Le nom de modèle dépend du site et peut changer. Il est aussi sélectionnable depuis les réglages de l’extension. Activer/configurer au préalable `API_SERVER_ENABLED`, `API_SERVER_PORT=8642` et `API_SERVER_KEY` dans le profil Hermes. Le side panel passe cette clé par Native Messaging et mémorise `X-Hermes-Session-Id` ainsi que `X-Hermes-Session-Key` retournés par Hermes pour reprendre la session et son périmètre de mémoire.
+Choose any listed provider/model supported by the current website adapter. Model identifiers and website availability may change. The `HERMEXTENT_BRIDGE_TOKEN` used by the Hermes profile is a **local gateway password**, not a provider API key. It stays in Hermes `.env`; do not paste or publish it. The gateway binds only to `127.0.0.1`, checks the bearer credential, and rejects non-loopback hosts.
 
-## Modèle de sécurité
+## Commands and endpoints
 
-- L’extension ne fait que communiquer avec le compagnon par l’API Native Messaging de Chrome ; elle n’envoie pas de requête HTTP à `localhost`.
-- Le relais HTTP du compagnon écoute uniquement sur `127.0.0.1:8765`, refuse les requêtes non loopback et protège les générations par `HERMEXTENT_BRIDGE_TOKEN` (généré dans `.env` Hermes).
-- L’hôte Native Messaging n’accepte que l’origine de l’extension indiquée lors de l’installation. Le token de l’API Hermes est conservé dans le stockage local de l’extension ; il ne doit pas être partagé.
-- La permission Chrome `cookies` et les accès hôtes sont nécessaires aux intégrations des fournisseurs. Le code récupéré des sessions web est sensible ; ne charge l’extension que depuis une source de confiance.
-- L’API Hermes inclut des outils puissants comme le terminal. Garder l’API liée à la boucle locale, son bearer key secret, et ne pas exposer son port sur le réseau.
-- Le relais n’est pas un endpoint public, un proxy général ou un mécanisme de contournement des quotas. Les politiques, abonnements et limites des services fournisseurs s’appliquent.
+```sh
+npm ci
+npm run build:gateway  # bundle the shared web-provider code
+npm run gateway        # build the provider bundle and start the gateway
+npm test               # automated tests; no logged-in provider session is used
+npm run check          # build, typecheck, tests, and npm audit
+```
 
-## Capacités et limites par fonction
+- Dashboard: `http://127.0.0.1:20128/`
+- Health: `http://127.0.0.1:20128/health`
+- Models: `GET /v1/models` (local bearer credential required)
+- Completions: `POST /v1/chat/completions` (local bearer credential required; streaming and non-streaming)
 
-Voir [la matrice de capacité](docs/capability-matrix.md) : elle distingue le code présent, les tests synthétiques et les essais réels manquants, et maintient explicites les fonctions Hermes qui ne sont pas encore exposées dans le panneau.
+The process can be stopped with Ctrl+C. To sign out, use the provider website in the dedicated browser profile. To remove sessions, stop the gateway and remove only the `browser-sessions` directory after confirming you no longer need those logins. Do not delete Hermes `.env` as part of routine troubleshooting; it may contain other settings.
 
-## Tests et limites actuelles
+## Migration from the 0.1.0 Chrome-extension prototype
 
-`npm test` vérifie les 11 builders HTTPS, les adaptateurs/parsers, les appels d’outils structurés, le réassemblage de frames Native Messaging, le cycle CLI installation/mise à jour/désinstallation dans un profil temporaire, la préservation des fichiers personnalisés et l’annulation. Le relais Python est testé pour l’authentification, le streaming SSE, les redirections non-loopback, la limite de concurrence et les grands messages segmentés. `npm run check` ajoute build, TypeScript et audit npm; `npm run package` produit ensuite les deux archives.
+Do not remove the old extension until the gateway has started, the Hermes profile has been updated, and at least one real web-session request has succeeded. After that:
 
-**Pas encore validé en conditions réelles :** aucun fournisseur avec compte connecté, aucune session Chrome réelle et aucun cycle de génération Hermes complet n’ont été exécutés ici. La découverte du plugin par le code officiel Hermes (`providers.get_provider_profile`) a maintenant réussi après installation dans un profil temporaire, y compris l’alias `hermes-web`; cela ne valide pas le runtime/API Hermes au complet. Un headless shell Chromium temporaire démarre; le HTML/CSS/JS du panneau a passé un smoke test avec `chrome.*` simulé, mais ce shell ne charge pas les extensions MV3 (pas de service worker, Native Messaging ni vrai side panel). Le test des builders ne prouve ni que l’authentification marche, ni que les endpoints privés sont encore compatibles. L’annulation est implémentée jusqu’au fetch du site, mais reste à vérifier dans un navigateur fonctionnel. Les protocoles peuvent évoluer, et certaines pages peuvent imposer des challenges ou des modalités non capturées par les tests.
+1. Remove **Hermes Browser** from `chrome://extensions`.
+2. From the project folder, unregister the old Native Messaging host with `py -3 .\companion\uninstall.py --browser chrome` (Windows) or `python companion/uninstall.py --browser chrome` (macOS/Linux).
+3. Do **not** add `--remove-plugin` or `--remove-token`: the new gateway still uses the `hermes-browser` provider profile and the local bearer credential in Hermes `.env`.
 
-Avant de déclarer la production : lancer la matrice Chrome/OS, vérifier le chargement du plugin dans une installation Hermes complète, exécuter des générations streaming et non-streaming ainsi que des outils/annulations, valider authentification et reprise de session, tester installation/upgrade/désinstallation sur Windows/macOS/Linux, puis publier une matrice réelle des capacités par fournisseur. Hermes doit être installé séparément; l’archive ne l’inclut pas.
+This cleanup does not erase the dedicated `browser-sessions` profile. Sign out in the dedicated browser or remove only that directory if you intentionally want to delete its website sessions.
+
+## Security and provider limitations
+
+- The gateway listens only on IPv4 loopback (`127.0.0.1`); it is not a LAN or public proxy. The API requires the local bearer credential and validates the host header.
+- Provider sessions are saved by the browser in the dedicated `browser-sessions` profile. Anyone with access to that Windows/macOS/Linux user account may be able to use those sessions. Protect the OS account and profile directory.
+- The dashboard's cookie badges are best-effort indicators only. Some providers store authentication in local storage or rotate cookies; a badge is not proof of a valid session.
+- Web protocols are unofficial and may be incompatible with provider terms, change without notice, hit account limits, or trigger security checks. This project does not bypass subscriptions, quotas, or provider controls.
+- The gateway does not promise all Hermes capabilities at this stage. Tool calls are translated through provider prompts and parsers; approvals, files, images, audio, long-running tasks, and other Hermes surfaces need their own verified end-to-end work.
+- The original MV3 extension and Native Messaging companion remain in the repository as a legacy experimental path, but are no longer required by the primary gateway setup. Do not install both as if they were the same route: the extension uses the old Native Messaging relay while the gateway uses port 20128.
+
+## Validation status
+
+See [the capability matrix](docs/capability-matrix.md) and [validation log](docs/validation-log.md). Unit/integration tests use synthetic provider payloads and a temporary local Hermes home. They do not establish that a site currently accepts the request, that a session is valid, that Playwright injection works under the site's current browser policy, or that a real Hermes tool call completes. Those tests must be performed with explicit user accounts and documented individually before a production claim.
+
+## Development
+
+Provider definitions, stream adapters, and parsers are currently shared with the legacy extension under `extension/src/background/web-providers/`. The gateway bundles these sources with esbuild, then runs provider fetch handlers inside a same-origin page in the dedicated browser context so website cookies and page-only state remain available. `gateway/provider-entry.ts` is the bundling boundary; `gateway/server.mjs` implements the local OpenAI-compatible router; `gateway/browser-session.mjs` owns the persistent browser context and login pages.
+
+```sh
+npm ci
+npm run check
+```
+
+Third-party notices for ChromeClaw and Hermes source are preserved in `THIRD_PARTY_NOTICES.md`.

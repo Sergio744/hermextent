@@ -1,19 +1,18 @@
-# Faisabilité — Hermes Agent dans le navigateur
+# Étude — Hermes Web Gateway et sessions web
 
-**État de l’étude :** 3 novembre 2026
-**Décision d’architecture retenue :** extension Chrome + compagnon Hermes local
-**Fournisseurs web demandés :** les 11 connecteurs présents dans ChromeClaw, intégrés progressivement
+**État de l’étude et du prototype :** 3 novembre 2026
+**Architecture principale proposée :** routeur OpenAI-compatible local + navigateur Playwright dédié, sans extension Chrome obligatoire.
+**Fournisseurs web ciblés :** les 11 connecteurs étudiés dans ChromeClaw, intégrés et validés progressivement.
 
-## Conclusion
+## Décision et conclusion provisoire
 
-**Oui, le projet est faisable avec le périmètre choisi**, à condition de conserver Hermes comme runtime Python local et de construire une extension qui lui sert d’interface. Une extension seule ne peut pas raisonnablement fournir la parité avec les fonctions Hermes qui dépendent d’un processus Python, d’outils système, de tâches persistantes ou de services d’arrière-plan.
+Le choix a évolué après le premier prototype : plutôt que demander à l’utilisateur d’installer l’extension Chrome et son Native Messaging host, le projet expose maintenant une passerelle locale inspirée du modèle de routeur d’OmniRoute. Hermes envoie une requête HTTP locale; un processus Node ouvre un profil Chrome/Edge dédié et utilise les sessions web connectées pour relayer la génération.
 
-Il faut distinguer deux fonctions complémentaires :
+Hermes Agent reste installé séparément et demeure responsable de l’orchestration, des outils, des approbations, de la mémoire, des skills, des tâches et des intégrations. Le gateway est un fournisseur d’inférence OpenAI-compatible, pas un runtime Hermes de remplacement. La session de navigation est séparée du profil Chrome habituel et n’importe pas ses cookies.
 
-1. **Hermes local** conserve l’orchestration de l’agent et ses capacités : outils, exécution et approbations, mémoire, skills, MCP, sous-agents, planification et intégrations de passerelle.
-2. **L’extension** fournit l’interface navigateur, la gestion des sessions de conversation et un pont vers les modèles web utilisant la session déjà ouverte dans le navigateur. Pour ces modèles, elle doit retransmettre le texte et les appels d’outils vers Hermes afin que ce soit Hermes — et non une deuxième boucle d’agent indépendante — qui exécute les outils.
+Cette architecture évite l’extension et Native Messaging, mais **ne prouve pas qu’un site autorise ou tolère l’automatisation**. Les APIs internes peuvent changer, les pages peuvent imposer des challenges, et les règles/quotas des services s’appliquent. Aucun des 11 fournisseurs n’est à déclarer validé avant un test réel. Playwright Core est une dépendance d’automatisation, pas un fournisseur modèle ni un moyen de contourner un compte ou un abonnement.
 
-La zone la plus risquée n’est donc pas le panneau de chat : c’est le **pont bidirectionnel d’inférence** entre le runtime Hermes et le contexte navigateur. Le serveur API Hermes sait déjà recevoir des clients HTTP/SSE, mais l’étude n’a pas établi qu’il sait, sans adaptation, déléguer une génération à une extension Chrome connectée. Ce relais devra être conçu et testé avant de promettre que les 11 fournisseurs fonctionnent de bout en bout.
+La passerelle expose le contrat `/v1` sur loopback et demande un bearer secret local. Ce secret protège le service sur l’ordinateur; ce n’est pas une clé API commerciale et il ne doit pas être partagé. Les sessions/cookies restent dans le profil du navigateur dédié.
 
 ## Ce que REA a confirmé dans ChromeClaw
 
@@ -127,6 +126,6 @@ Relier et tester dans l’extension les fonctionnalités exposées par l’API H
 
 ## État du dépôt de travail — 3 novembre 2026
 
-Le dépôt contient maintenant le prototype vertical MV3, le compagnon Native Messaging/Python, le profil public `ProviderProfile`, le panneau latéral et les 11 adaptateurs ciblés. Build/typecheck/tests et audit npm passent; deux archives d’installation sont générées par `npm run package`. Le pont inclut sessions, streaming, relais d’outils et propagation de l’annulation, mais ceux-ci ne remplacent pas les tests e2e.
+Le dépôt conserve l’ancien prototype MV3/Native Messaging comme chemin legacy et ajoute Hermes Web Gateway 0.2.0 : routeur local Node/OpenAI-compatible, navigateur Playwright avec profil isolé, installateur du provider Hermes et 11 adapters réutilisés. `npm run package` produit désormais une archive source complète `release/hermes-web-gateway-0.2.0.zip`.
 
-**Pas de validation production :** la découverte du plugin par le code officiel Hermes (`providers.get_provider_profile`) réussit sur un profil temporaire, y compris l’alias `hermes-web`; le serveur/runtime Hermes complet n’a pas été lancé. Aucun fournisseur connecté n’a été essayé. Un Chromium temporaire a été tenté, mais le binaire échoue au démarrage faute de `libnspr4.so`. Prochaine phase : fournir ou installer les bibliothèques système nécessaires, exécuter les parcours Chrome/OS réels et valider fournisseurs, outils, annulation, sessions et upgrade/désinstallation. Les sources amont et preuves REA restent sous `.research/`, ignorées par Git. Les choix maintenus sont **compagnon local accepté, les 11 fournisseurs visés, livraison progressive**, sans garantie de gratuité ni de compatibilité tant que les tests ne la prouvent pas.
+**Pas de validation production :** tests de build, typecheck et tests automatisés locaux passent, et le serveur local a été vérifié sans ouvrir Chrome. Le sandbox n’a pas de navigateur installé; aucune exécution Playwright, session réelle, génération fournisseur, runtime Hermes complet ou tool call de bout en bout n’a été essayée. Les prochaines étapes sont de tester l’ouverture du profil dédié et le flux d’injection d’une fonction provider dans Chrome/Edge, puis valider un fournisseur à la fois, les outils, l’annulation et la persistance de session sur les OS annoncés. Aucune gratuité, compatibilité ou permission fournisseur n’est garantie sans validation réelle.
