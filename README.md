@@ -31,6 +31,27 @@ The local API accepts model IDs in the form `provider-id:model-id`. The current 
 - Google Chrome or Microsoft Edge installed. Playwright Core controls the installed browser; this project does not download a separate browser.
 - A user account/session on whichever provider site you want to use.
 
+## Drive the same browser window (recommended)
+
+The two-step route below is the only way to have provider tabs open **inside one existing Chrome window** instead of a second, cookie-less profile:
+
+```powershell
+# Terminal 1 — starts a Chrome window the gateway may control (its own persistent profile)
+npm run chrome:debug
+
+# Sign in to the provider sites in the window that opens, then leave it open.
+# Terminal 2 — the gateway attaches to that window
+npm run gateway
+```
+
+Notes specific to this route:
+
+- Chrome only accepts remote debugging on a **non-default** profile directory (Chrome 136+ security rule), so this window uses `%USERPROFILE%\.hermes\browser-sessions\debug-profile`. Signing in once is enough: that profile persists between runs, and the gateway never creates another one.
+- It is impossible to attach to the Chrome you opened normally: a browser started without `--remote-debugging-port` exposes no control channel at all.
+- Clicks on **Ouvrir la session web** now reuse an existing tab on the provider site when there is one; otherwise the tab opens in this same window.
+- The gateway never closes your window when it stops; it only detaches.
+- Different port or endpoint: `HERMES_DEBUG_PORT=9333 npm run chrome:debug` together with `npm run gateway -- --attach http://127.0.0.1:9333`.
+
 ## Use your existing Chrome/Edge sessions
 
 By default the gateway opens a **dedicated profile**: clean, isolated, and separate from your normal browser. That profile cannot see the sites you are already signed into.
@@ -64,6 +85,7 @@ There is no way to attach the gateway to an *already running* Chrome window: a b
 ## Troubleshooting
 
 - **“Jeton d’interface manquant ou périmé”** — the dashboard you are looking at was loaded before the current gateway started, or it was opened through another host. Refresh `http://127.0.0.1:20128`; the anti-CSRF token changes on every gateway restart, so an old tab must be reloaded. The dashboard token is a random per-process secret, not your provider credential.
+- **“Aucun navigateur à piloter sur http://127.0.0.1:9222”** — the attach route needs the debug window: run `npm run chrome:debug` first, leave it open, then start the gateway.
 - **The provider site opens signed out** — you are using the dedicated profile. Switch to `npm run gateway:chrome` (or `edge`) to reuse your existing sessions, after closing that browser.
 - **No browser window opens** — Chrome/Edge was not found. Install it, or set `HERMES_BROWSER_EXECUTABLE` to the full `chrome.exe`/`msedge.exe` path and restart the gateway. The gateway never downloads a browser.
 - **A provider says the session is unverified** — sign in inside the dedicated window, keep it open, then refresh the dashboard. The cookie indicator is only a heuristic.

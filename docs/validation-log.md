@@ -56,3 +56,12 @@ Les essais Chrome/Chromium et l’intégration Native Messaging ci-dessous conce
 - Vérifié automatiquement : résolution des trois modes, refus d’un nom de profil piégeux, copie réelle d’un faux profil Chrome (cookies présents dans la copie, source intacte), refus d’écrire dans le dossier navigateur d’origine, `/health` expose le profil effectif, dashboard et jeton anti-CSRF inchangés.
 - Non vérifié : ouverture effective de Chrome/Edge avec un vrai profil (aucun navigateur dans l’environnement), comportement d’un profil verrouillé par une instance réellement active, validité des cookies copiés sur les sites fournisseurs.
 - Limite documentée : Chrome lancé sans indicateur d’automatisation n’expose aucun canal de contrôle; le gateway ne peut pas s’attacher à une fenêtre déjà ouverte.
+
+## Hermes Web Gateway 0.6.0 — pilotage d’une fenêtre existante (attach)
+
+- Objectif utilisateur : que le site fournisseur s’ouvre dans la fenêtre Chrome où l’interface du gateway est affichée, et non dans un profil neuf.
+- Contrainte établie par la documentation Chrome : depuis Chrome 136, les interrupteurs de débogage distant sont ignorés pour le répertoire de données par défaut; il faut un `--user-data-dir` non standard. S’attacher à un Chrome lancé normalement est donc impossible.
+- Solution livrée : `npm run chrome:debug` démarre une fenêtre Chrome persistante et pilotable (profil `.hermes/browser-sessions/debug-profile`, port 9222); `npm run gateway` s’y attache via CDP (`--profile attach`, `chromium.connectOverCDP`). Les clics « Ouvrir la session web » réutilisent l’onglet déjà ouvert sur le domaine du fournisseur.
+- Détachement propre : le gateway ne ferme jamais la fenêtre de l’utilisateur.
+- Vérifié automatiquement : sonde `/json/version` (disponible/indisponible), message d’erreur actionnable quand rien n’écoute, réutilisation de l’onglet existant sans création d’onglet, profil `attach` exposé par `/health`, version 0.6.0.
+- Non vérifié : connexion CDP réelle à un Chrome Windows, ouverture effective d’onglets dans sa fenêtre, connexion aux 11 fournisseurs (aucun navigateur dans l’environnement de test).

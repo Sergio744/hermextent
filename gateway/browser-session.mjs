@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 // The dedicated profile keeps its own cookie jar, so existing Chrome/Edge sessions are
 // invisible to it. When a profile mode is requested we briefly reuse the *real* profile
 // directory so the site sessions the user already has are the ones being used.
-export const PROFILE_MODES = ['isolated', 'chrome', 'edge'];
+export const PROFILE_MODES = ['isolated', 'chrome', 'edge', 'attach'];
 
 function browserRoots(env = process.env) {
   // Explicit overrides first: useful for portable Chrome, custom installs, and tests.
@@ -41,6 +41,21 @@ const PROFILE_NAME_PATTERN = /^(Default|Profile \d+)$/;
 
 function profileName(value) {
   return typeof value === 'string' && PROFILE_NAME_PATTERN.test(value) ? value : 'Default';
+}
+
+// Chrome 136+ refuses remote debugging on the default profile directory, so "attach" only
+// works for a browser the user launched with both a debugging port and a custom profile.
+export const DEFAULT_DEBUG_URL = 'http://127.0.0.1:9222';
+
+export async function probeDebugEndpoint(endpoint = DEFAULT_DEBUG_URL, fetchImpl = fetch) {
+  try {
+    const response = await fetchImpl(`${String(endpoint).replace(/\/$/, '')}/json/version`, { signal: AbortSignal.timeout(1500) });
+    if (!response.ok) return { available: false, reason: `HTTP ${response.status}` };
+    const value = await response.json();
+    return { available: true, browser: String(value?.Browser || 'navigateur inconnu'), webSocketDebuggerUrl: value?.webSocketDebuggerUrl };
+  } catch (error) {
+    return { available: false, reason: String(error?.message || error) };
+  }
 }
 
 export async function resolveProfilePlan({ mode = 'isolated', profile = 'Default', hermesHome, env = process.env }) {
@@ -139,13 +154,16 @@ async function findBrowserExecutable() {
 }
 
 export class BrowserSessions {
-  constructor({ hermesHome, providers, profileMode = 'isolated', profileName: profile = 'Default' }) {
+  constructor({ hermesHome, providers, profileMode = 'isolated', profileName: profile = 'Default', attachUrl = DEFAULT_DEBUG_URL }) {
     this.hermesHome = hermesHome;
     this.providers = providers;
     this.profileMode = profileMode;
     this.profileName = profile;
+    this.attachUrl = attachUrl;
+    this.attached = false;
     this.plan = undefined;
     this.context = undefined;
+    this.manualTabs = false;
     this.pages = new Map();
     this.active = new Map();
     this.locks = new Map();
@@ -156,6 +174,27 @@ export class BrowserSessions {
     if (this.context) return this.context;
     if (this.launchPromise) return this.launchPromise;
     this.launchPromise = (async () => {
+      if (this.profileMode === 'attach') {
+        const probe = await probeDebugEndpoint(this.attachUrl);
+        if (!probe.available) {
+          throw new Error(`Aucun navigateur à piloter sur ${this.attachUrl} (${probe.reason}). Lance « npm run chrome:debug », connecte-toi à tes sites dans la fenêtre qui s’ouvre, puis reviens cliquer ici.`);
+        }
+        let context;
+        try {
+          context = await chromium.connectOverCDP(this.attachUrl);
+        } catch (error) {
+          throw new Error(`Connexion au navigateur impossible sur ${this.attachUrl} : ${String(error?.message || error).split('\n')[0]}`);
+        }
+        this.attached = true;
+        this.plan = { mode: 'attach', userDataDir: this.attachUrl, profileDirectory: undefined, isolated: false, browserLabel: probe.browser };
+        this.context = context;
+        context.on('close', () => {
+          this.context = undefined;
+          this.attached = false;
+          this.pages.clear();
+        });
+        return context;
+      }
       this.plan = await resolveProfilePlan({ mode: this.profileMode, profile: this.profileName, hermesHome: this.hermesHome });
       await mkdir(this.plan.userDataDir, { recursive: true });
       const executablePath = await findBrowserExecutable();
@@ -190,9 +229,27 @@ export class BrowserSessions {
     return this.launchPromise;
   }
 
+  // Test seam: exercises the same tab-routing logic without starting a browser.
+  _getPageForTest(provider) { return this.#getPage(provider); }
+
   async #getPage(provider) {
     const context = await this.ensureBrowser();
     let page = this.pages.get(provider.id);
+    if ((!page || page.isClosed()) && this.profileMode === 'attach') {
+      // Reuse the tab the user already has open on the provider site instead of opening
+      // yet another one in the same browser window.
+      const host = new URL(provider.loginUrl).host;
+      for (const candidate of context.pages()) {
+        if (candidate.isClosed()) continue;
+        try {
+          if (new URL(candidate.url()).host === host) { page = candidate; break; }
+        } catch { /* ignore pages without a URL */ }
+      }
+      if (page) {
+        this.pages.set(provider.id, { page, active: undefined });
+        return { page, pageState: this.pages.get(provider.id) };
+      }
+    }
     if (!page || page.isClosed()) {
       page = await context.newPage();
       const pageState = { page, active: undefined };
@@ -242,6 +299,9 @@ export class BrowserSessions {
   }
 
   describeProfile() {
+    if (this.profileMode === 'attach') {
+      return { mode: 'attach', profile: this.profileName, browser: this.plan?.browserLabel ?? `navigateur sur ${this.attachUrl}`, isolated: false };
+    }
     if (this.plan) return { mode: this.profileMode, profile: this.profileName, browser: this.plan.browserLabel, isolated: this.plan.isolated };
     // Report the configured intent even before the browser starts, without touching a profile.
     const label = this.profileMode === 'edge' ? 'Microsoft Edge' : this.profileMode === 'chrome' ? 'Google Chrome' : 'profil dédié';
@@ -351,8 +411,12 @@ export class BrowserSessions {
 
   async close() {
     const context = this.context;
+    const attached = this.attached;
     this.context = undefined;
-    if (context) await context.close().catch(() => undefined);
+    this.attached = false;
+    // Detaching must leave the user's own browser (and its tabs) untouched.
+    if (context && attached) await context.close().catch(() => undefined);
+    else if (context) await context.close().catch(() => undefined);
     // The copied profile keeps the user's refreshed cookies for the next run.
   }
 }

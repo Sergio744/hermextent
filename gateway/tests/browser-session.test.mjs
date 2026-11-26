@@ -71,3 +71,49 @@ test('the profile plan copies the chosen profile out of the live browser directo
     if (previous === undefined) delete process.env.HERMES_CHROME_USER_DATA; else process.env.HERMES_CHROME_USER_DATA = previous;
   }
 });
+
+test('attach mode reports a usable debug endpoint and a clear failure otherwise', async () => {
+  const { probeDebugEndpoint, BrowserSessions } = await import('../browser-session.mjs');
+
+  const reachable = await probeDebugEndpoint('http://127.0.0.1:9222', async () => ({
+    ok: true, json: async () => ({ Browser: 'Chrome/140.0.0.0', webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/browser/x' }),
+  }));
+  assert.equal(reachable.available, true);
+  assert.equal(reachable.browser, 'Chrome/140.0.0.0');
+
+  const missing = await probeDebugEndpoint('http://127.0.0.1:9222', async () => { throw new Error('connect ECONNREFUSED'); });
+  assert.equal(missing.available, false);
+  assert.match(missing.reason, /ECONNREFUSED/);
+
+  const sessions = new BrowserSessions({ hermesHome: '/tmp/unused', providers: new Map(), profileMode: 'attach', attachUrl: 'http://127.0.0.1:9' });
+  assert.deepEqual(sessions.describeProfile(), { mode: 'attach', profile: 'Default', browser: 'navigateur sur http://127.0.0.1:9', isolated: false });
+  await assert.rejects(() => sessions.ensureBrowser(), /npm run chrome:debug/);
+});
+
+test('attach mode reuses the tab the user already has open on the provider site', async () => {
+  const { BrowserSessions } = await import('../browser-session.mjs');
+  const existing = {
+    isClosed: () => false,
+    url: () => 'https://chat.deepseek.com/a/chat/s/123',
+    bringToFront: async () => undefined,
+    evaluate: async () => undefined,
+    exposeFunction: async () => undefined,
+    addInitScript: async () => undefined,
+    on: () => undefined,
+  };
+  let created = 0;
+  const context = {
+    pages: () => [existing],
+    newPage: async () => { created += 1; return existing; },
+    on: () => undefined,
+  };
+  const sessions = new BrowserSessions({ hermesHome: '/tmp/unused', providers: new Map(), profileMode: 'attach', attachUrl: 'http://127.0.0.1:9222' });
+  sessions.ensureBrowser = async () => context;
+  const provider = {
+    id: 'deepseek-web',
+    loginUrl: 'https://chat.deepseek.com/sign_in',
+  };
+  const { page } = await sessions._getPageForTest(provider);
+  assert.equal(page, existing, 'the already-open provider tab must be reused');
+  assert.equal(created, 0);
+});

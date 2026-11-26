@@ -52,7 +52,7 @@ test('local router serves health/models, requires bearer auth, and exposes no se
 
   const health = await (await fetch(`${base}/health`)).json();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '0.5.0');
+  assert.equal(health.version, '0.6.0');
   assert.equal(health.providerCount, 11);
   assert.deepEqual(health.profile, { mode: 'isolated', profile: 'Default', browser: 'profil dédié', isolated: true });
 
