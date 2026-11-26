@@ -13,7 +13,7 @@ __pycache__/
 /tests/.build/
 /release/*
 !/release/
-!/release/hermes-web-gateway-0.3.0.zip
+!/release/hermes-web-gateway-0.4.0.zip
 
 # Ship the built MV3 entry points so a GitHub source archive can load extension/ directly.
 !extension/dist/

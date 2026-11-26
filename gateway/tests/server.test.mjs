@@ -52,7 +52,7 @@ test('local router serves health/models, requires bearer auth, and exposes no se
 
   const health = await (await fetch(`${base}/health`)).json();
   assert.equal(health.ok, true);
-  assert.equal(health.version, '0.3.0');
+  assert.equal(health.version, '0.4.0');
   assert.equal(health.providerCount, 11);
 
   const denied = await fetch(`${base}/v1/models`);
@@ -76,18 +76,43 @@ test('local router serves health/models, requires bearer auth, and exposes no se
   assert.equal(invalidModel.status, 404);
   assert.equal((await (await fetch(`${base}/health`)).json()).browserStarted, false, 'invalid models must not launch a browser');
 
-  const sameOriginLogin = await fetch(`${base}/api/login`, {
+  const dashboard = await fetch(`${base}/`);
+  assert.equal(dashboard.status, 200);
+  assert.match(dashboard.headers.get('set-cookie') || '', /hermes_ui=/);
+  assert.equal(/frame-ancestors 'none'/.test(dashboard.headers.get('content-security-policy') || ''), true);
+  const dashboardHtml = await dashboard.text();
+  const uiToken = dashboardHtml.match(/name="hermes-ui-token" content="([^"]+)"/)?.[1];
+  assert.ok(uiToken && uiToken.length >= 32, 'dashboard must expose a per-process UI token');
+  assert.equal(dashboardHtml.includes(token), false, 'the gateway credential must never be embedded in the dashboard');
+
+  const noToken = await fetch(`${base}/api/login`, {
     method: 'POST',
-    headers: { Origin: base, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ providerId: 'unknown-provider' }),
   });
-  assert.equal(sameOriginLogin.status, 400, 'the exact local Origin should reach provider validation without a custom marker header');
-  assert.match((await sameOriginLogin.json()).error.message, /Fournisseur inconnu/);
+  assert.equal(noToken.status, 403);
+  assert.match((await noToken.json()).error.message, /Actualise/);
+
+  // The Origin header is often stripped by extensions/proxies; a valid UI token alone must work.
+  const strippedOriginLogin = await fetch(`${base}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Hermes-UI-Token': uiToken },
+    body: JSON.stringify({ providerId: 'unknown-provider' }),
+  });
+  assert.equal(strippedOriginLogin.status, 400, 'a valid UI token should reach provider validation even without an Origin header');
+  assert.match((await strippedOriginLogin.json()).error.message, /Fournisseur inconnu/);
   assert.equal((await (await fetch(`${base}/health`)).json()).browserStarted, false);
+
+  const sameOriginLogin = await fetch(`${base}/api/login`, {
+    method: 'POST',
+    headers: { Origin: base, 'Content-Type': 'application/json', 'X-Hermes-UI-Token': uiToken },
+    body: JSON.stringify({ providerId: 'unknown-provider' }),
+  });
+  assert.equal(sameOriginLogin.status, 400);
 
   const forgedLogin = await fetch(`${base}/api/login`, {
     method: 'POST',
-    headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' },
+    headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json', 'X-Hermes-UI-Token': uiToken },
     body: JSON.stringify({ providerId: 'gemini-web' }),
   });
   assert.equal(forgedLogin.status, 403);

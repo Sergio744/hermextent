@@ -40,3 +40,10 @@ Les essais Chrome/Chromium et l’intégration Native Messaging ci-dessous conce
 2. Hermes Agent réellement installé/démarré avec son API locale, authentification et session persistante.
 3. Essais de streaming, tool calls, refus/approbations, annulation et reprise de session.
 4. Matrice par fournisseur et par OS, avec compte autorisé et protocole réel daté.
+
+## Hermes Web Gateway 0.4.0 — jeton d’interface local
+
+- Cause identifiée d’après un rapport utilisateur Windows : l’en-tête `Origin` n’arrivait pas au gateway (extension, proxy ou suite de sécurité), donc l’ouverture de session était refusée par un 403 trompeur.
+- Correctif : l’interface locale porte un jeton aléatoire par processus, exposé dans une balise meta et envoyé en en-tête `X-Hermes-UI-Token`; un cookie `HttpOnly; SameSite=Strict` est également posé. Le contrôle d’origine ne s’applique plus que si l’en-tête est réellement présent.
+- Vérifié automatiquement : jeton absent → 403 explicite; jeton valide sans `Origin` → la requête atteint la validation du fournisseur; `Origin` externe avec jeton valide → 403 et aucune fenêtre lancée; le jeton de passerelle n’apparaît jamais dans le HTML.
+- Non vérifié : ouverture réelle du navigateur et connexion aux 11 fournisseurs (aucun Chrome/Edge dans l’environnement de test).

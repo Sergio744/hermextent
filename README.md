@@ -33,7 +33,7 @@ The local API accepts model IDs in the form `provider-id:model-id`. The current 
 
 ## Troubleshooting
 
-- **“Origine de l’interface locale refusée”** — the dashboard and the gateway must be the same version and the same host. Open `http://127.0.0.1:20128` exactly (not `localhost`, not a proxied preview URL), stop any older gateway with Ctrl+C, and confirm the version badge matches the archive you run. The refusal message now names both origins.
+- **“Jeton d’interface manquant ou périmé”** — the dashboard you are looking at was loaded before the current gateway started, or it was opened through another host. Refresh `http://127.0.0.1:20128`; the anti-CSRF token changes on every gateway restart, so an old tab must be reloaded. The dashboard token is a random per-process secret, not your provider credential.
 - **No browser window opens** — Chrome/Edge was not found. Install it, or set `HERMES_BROWSER_EXECUTABLE` to the full `chrome.exe`/`msedge.exe` path and restart the gateway. The gateway never downloads a browser.
 - **A provider says the session is unverified** — sign in inside the dedicated window, keep it open, then refresh the dashboard. The cookie indicator is only a heuristic.
 - **Requests fail with a provider error** — the website protocol may have changed, or the account may not have access to that model. Report the exact message; nothing is silently retried with another provider.
