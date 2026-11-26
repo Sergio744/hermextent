@@ -121,6 +121,43 @@ Open `http://127.0.0.1:20128` in your normal browser. Choose **Ouvrir la session
 
 On Linux/macOS, run `npm ci`, `python3 gateway/install.py`, then `npm run gateway`; the gateway tries to locate Chrome/Edge. Set `HERMES_BROWSER_EXECUTABLE` if auto-detection does not find your browser.
 
+## Guided first run (do this once)
+
+After signing in to your providers, verify the whole chain before touching Hermes:
+
+```powershell
+npm run gateway:check
+```
+
+This reads the local credential from your Hermes `.env` (it prints the model list, never the token), lists the 11 models, and sends one real request. Expected tail:
+
+```text
+Modèles proposés (11) :
+  - gemini-web:gemini-3-flash
+  ...
+  - glm-web:GLM-5-Turbo
+  - glm-intl-web:GLM-5-Turbo
+  ...
+Réponse en 4.2s :
+OK
+
+Le tour complet a fonctionné. Tu peux sélectionner ce modèle dans Hermes.
+```
+
+Model ids are case-sensitive in the list but the checker accepts any casing. Pick another model with `node scripts/check-gateway.mjs glm-intl-web:GLM-5-Turbo "Bonjour"`. If it fails, the message names the cause (gateway stopped, wrong credential, provider error) — fix that before configuring Hermes, since Hermes would show the same error.
+
+Then configure Hermes in `%USERPROFILE%\.hermes\config.yaml` (keep a backup first):
+
+```yaml
+model:
+  provider: hermes-browser
+  model: glm-web:GLM-5-Turbo
+```
+
+Restart Hermes Desktop/Agent so it reloads the provider profile, then send a message in Hermes. The gateway terminal should log the request, and the answer must come from the provider site you are signed into.
+
+Sign-in mapping for the sites you already opened: **chat.z.ai → `glm-web`** (or `glm-intl-web` for the international chat), **chat.deepseek.com → `deepseek-web`**, **chatgpt.com → `chatgpt-web`**, **gemini.google.com → `gemini-web`**, **claude.ai → `claude-web`**, **kimi.com → `kimi-web`**, **chat.qwen.ai → `qwen-web`**, **doubao.com → `doubao-web`**, **chatglm.cn → `glm-web`**, **rakuten.co.jp → `rakuten-web`**.
+
 ## Configure Hermes
 
 The installer places the `hermes-browser` provider profile in the Hermes home directory. Select it in Hermes, for example:

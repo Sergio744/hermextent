@@ -73,3 +73,12 @@ Les essais Chrome/Chromium et l’intégration Native Messaging ci-dessous conce
 - Correctif : `ignoreDefaultArgs: ['--enable-automation']`, `--disable-blink-features=AutomationControlled` et neutralisation de `navigator.webdriver` au lancement du navigateur du gateway. Les options sont centralisées dans `STEALTH_LAUNCH_OPTIONS`.
 - Vérifié automatiquement : présence des options, absence de `--enable-automation`, version 0.7.0.
 - Non vérifié : réussite réelle d’une connexion Google (aucun navigateur ni compte dans l’environnement de test). Le contournement de détection n’est pas garanti dans la durée; connexion par mot de passe ou profil déjà connecté reste la voie fiable.
+
+## Hermes Web Gateway 0.8.0 — parcours de vérification guidé
+
+- Besoin utilisateur : après une connexion réussie au fournisseur, savoir quoi faire ensuite sans lire le README.
+- Ajout : `npm run gateway:check` — lit le jeton local dans le `.env` Hermes sans l’afficher, vérifie `/health`, liste les 11 modèles, contrôle le jeton, puis envoie un vrai tour non-streaming et affiche le texte obtenu ou la cause exacte de l’échec.
+- Ajout : section README « Guided first run » avec la configuration `config.yaml` et la correspondance site ↔ identifiant de modèle (`chat.z.ai` → `glm-web`).
+- Ajout : les mêmes options anti-détection d’automatisation dans `chrome:debug` que dans les navigateurs lancés par le gateway.
+- Référence mesurée : `glm-web:glm-4.6` est le modèle par défaut du fournisseur; `glm-intl-web:glm-4.6` couvre l’interface internationale.
+- Non vérifié : réponse réelle d’un fournisseur (aucun navigateur ni compte dans l’environnement de test).

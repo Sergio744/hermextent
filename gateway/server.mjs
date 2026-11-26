@@ -24,7 +24,7 @@ const providers = new Map([...plugins].map(([id, plugin]) => [id, {
   ...plugin,
   pageHandler: plugin.contentFetchHandler ?? mainWorldFetch,
 }]));
-const GATEWAY_VERSION = '0.7.0';
+const GATEWAY_VERSION = '0.8.0';
 const DEFAULT_PORT = Number(process.env.HERMEXTENT_GATEWAY_PORT || 20128);
 const HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 2 * 1024 * 1024;

@@ -1,6 +1,6 @@
 {
   "name": "hermes-web-gateway",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,7 +18,8 @@
     "check": "npm run build && npm run typecheck && npm test && npm audit --audit-level=low",
     "package": "npm run check && python scripts/package.py",
     "chrome:debug": "node scripts/chrome-debug.mjs",
-    "gateway:attach": "npm run build:gateway --silent && node gateway/server.mjs --profile attach"
+    "gateway:attach": "npm run build:gateway --silent && node gateway/server.mjs --profile attach",
+    "gateway:check": "node scripts/check-gateway.mjs"
   },
   "dependencies": {
     "playwright-core": "^1.65.1"

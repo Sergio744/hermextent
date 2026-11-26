@@ -49,6 +49,9 @@ const child = spawn(executable, [
   `--user-data-dir=${userDataDir}`,
   '--no-first-run',
   '--no-default-browser-check',
+  // Same anti-detection flags as the gateway-launched browsers, so Google/identity pages
+  // accept a sign-in typed in this window too.
+  '--disable-blink-features=AutomationControlled',
   'about:blank',
 ], { detached: true, stdio: 'ignore' });
 child.unref();
