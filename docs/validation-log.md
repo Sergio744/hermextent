@@ -65,3 +65,11 @@ Les essais Chrome/Chromium et l’intégration Native Messaging ci-dessous conce
 - Détachement propre : le gateway ne ferme jamais la fenêtre de l’utilisateur.
 - Vérifié automatiquement : sonde `/json/version` (disponible/indisponible), message d’erreur actionnable quand rien n’écoute, réutilisation de l’onglet existant sans création d’onglet, profil `attach` exposé par `/health`, version 0.6.0.
 - Non vérifié : connexion CDP réelle à un Chrome Windows, ouverture effective d’onglets dans sa fenêtre, connexion aux 11 fournisseurs (aucun navigateur dans l’environnement de test).
+
+## Hermes Web Gateway 0.7.0 — connexion Google refusée
+
+- Symptôme rapporté (capture utilisateur) : page `accounts.google.com/v3/signin/rejected` — « Ce navigateur ou cette application ne sont peut-être pas sûrs ».
+- Cause : Playwright ajoute `--enable-automation` et laisse `navigator.webdriver = true`; les fournisseurs d’identité refusent alors la connexion.
+- Correctif : `ignoreDefaultArgs: ['--enable-automation']`, `--disable-blink-features=AutomationControlled` et neutralisation de `navigator.webdriver` au lancement du navigateur du gateway. Les options sont centralisées dans `STEALTH_LAUNCH_OPTIONS`.
+- Vérifié automatiquement : présence des options, absence de `--enable-automation`, version 0.7.0.
+- Non vérifié : réussite réelle d’une connexion Google (aucun navigateur ni compte dans l’environnement de test). Le contournement de détection n’est pas garanti dans la durée; connexion par mot de passe ou profil déjà connecté reste la voie fiable.

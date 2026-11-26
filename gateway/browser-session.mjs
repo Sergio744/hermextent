@@ -47,6 +47,19 @@ function profileName(value) {
 // works for a browser the user launched with both a debugging port and a custom profile.
 export const DEFAULT_DEBUG_URL = 'http://127.0.0.1:9222';
 
+// Google (and other identity providers) refuse "Sign in with Google" from a browser that
+// advertises itself as automated ("Ce navigateur ou cette application ne sont peut-être pas
+// sûrs"). Playwright adds --enable-automation and an --enable-blink-features flag of its own;
+// these options hide that, which is required for a normal user sign-in to be possible.
+export const STEALTH_LAUNCH_OPTIONS = {
+  ignoreDefaultArgs: ['--enable-automation'],
+  args: [
+    '--disable-blink-features=AutomationControlled',
+    '--no-default-browser-check',
+    '--no-first-run',
+  ],
+};
+
 export async function probeDebugEndpoint(endpoint = DEFAULT_DEBUG_URL, fetchImpl = fetch) {
   try {
     const response = await fetchImpl(`${String(endpoint).replace(/\/$/, '')}/json/version`, { signal: AbortSignal.timeout(1500) });
@@ -198,7 +211,7 @@ export class BrowserSessions {
       this.plan = await resolveProfilePlan({ mode: this.profileMode, profile: this.profileName, hermesHome: this.hermesHome });
       await mkdir(this.plan.userDataDir, { recursive: true });
       const executablePath = await findBrowserExecutable();
-      const args = ['--no-first-run', '--no-default-browser-check'];
+      const args = [...STEALTH_LAUNCH_OPTIONS.args];
       if (this.plan.profileDirectory) args.push(`--profile-directory=${this.plan.profileDirectory}`);
       let context;
       try {
@@ -206,7 +219,14 @@ export class BrowserSessions {
           headless: false,
           ...(executablePath ? { executablePath } : { channel: process.platform === 'linux' ? 'chromium' : 'chrome' }),
           args,
+          ignoreDefaultArgs: STEALTH_LAUNCH_OPTIONS.ignoreDefaultArgs,
           viewport: null,
+        });
+        // navigator.webdriver must read false for identity providers that inspect it.
+        await context.addInitScript(() => {
+          try {
+            Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+          } catch { /* older engines */ }
         });
       } catch (error) {
         this.launchPromise = undefined;

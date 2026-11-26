@@ -117,3 +117,12 @@ test('attach mode reuses the tab the user already has open on the provider site'
   assert.equal(page, existing, 'the already-open provider tab must be reused');
   assert.equal(created, 0);
 });
+
+test('gateway-launched browsers hide the automation flags that block Google sign-in', async () => {
+  const { STEALTH_LAUNCH_OPTIONS } = await import('../browser-session.mjs');
+  assert.deepEqual(STEALTH_LAUNCH_OPTIONS.ignoreDefaultArgs, ['--enable-automation'],
+    'Playwright adds --enable-automation, which Google identity rejects');
+  assert.ok(STEALTH_LAUNCH_OPTIONS.args.includes('--disable-blink-features=AutomationControlled'));
+  assert.ok(STEALTH_LAUNCH_OPTIONS.args.includes('--no-first-run'));
+  assert.equal(STEALTH_LAUNCH_OPTIONS.args.some(arg => arg.includes('--enable-automation')), false);
+});

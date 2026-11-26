@@ -82,6 +82,18 @@ What happens then, and why it is a **copy**:
 
 There is no way to attach the gateway to an *already running* Chrome window: a browser started without automation flags exposes no control channel. The two supported routes are the dedicated profile and the copied real profile.
 
+## Signing in with Google
+
+Google blocks “Sign in with Google” inside browsers that identify themselves as automated. Version 0.7.0 hides those markers (`--enable-automation` removed, `AutomationControlled` disabled, `navigator.webdriver` reported as false) so a normal sign-in can succeed. Nothing else about your account is changed.
+
+If Google still refuses the sign-in:
+
+1. Sign in with an **email address and password** on the provider instead of the Google button (DeepSeek, ChatGPT and most sites offer both).
+2. Start the debug window once (`npm run chrome:debug`) and sign in to Google **in that window**: the gateway then drives the same window and reuses the session.
+3. Use `npm run gateway:chrome` to copy a profile where you are already signed in; Google only sees a restored cookie, not a fresh login.
+
+Never paste your Google password into the gateway or into a chat: it is only ever typed on Google's own page.
+
 ## Troubleshooting
 
 - **“Jeton d’interface manquant ou périmé”** — the dashboard you are looking at was loaded before the current gateway started, or it was opened through another host. Refresh `http://127.0.0.1:20128`; the anti-CSRF token changes on every gateway restart, so an old tab must be reloaded. The dashboard token is a random per-process secret, not your provider credential.
