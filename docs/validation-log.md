@@ -47,3 +47,12 @@ Les essais Chrome/Chromium et l’intégration Native Messaging ci-dessous conce
 - Correctif : l’interface locale porte un jeton aléatoire par processus, exposé dans une balise meta et envoyé en en-tête `X-Hermes-UI-Token`; un cookie `HttpOnly; SameSite=Strict` est également posé. Le contrôle d’origine ne s’applique plus que si l’en-tête est réellement présent.
 - Vérifié automatiquement : jeton absent → 403 explicite; jeton valide sans `Origin` → la requête atteint la validation du fournisseur; `Origin` externe avec jeton valide → 403 et aucune fenêtre lancée; le jeton de passerelle n’apparaît jamais dans le HTML.
 - Non vérifié : ouverture réelle du navigateur et connexion aux 11 fournisseurs (aucun Chrome/Edge dans l’environnement de test).
+
+## Hermes Web Gateway 0.5.0 — réutilisation du profil réel
+
+- Demande utilisateur : ouvrir les sites fournisseurs dans ses vraies sessions Chrome plutôt que dans un profil neuf.
+- Implémentation : `--profile chrome|edge` (ou `HERMES_BROWSER_PROFILE`), nom de profil validé (`Default`/`Profile N`), copie de `Local State` + dossier de profil vers `.hermes/browser-sessions/profile-backup/<mode>`, lancement avec `--profile-directory`. Le profil réel n’est jamais modifié ni supprimé.
+- Messages d’erreur ajoutés : verrou de profil en cours d’utilisation, chemin de profil invalide, binaire navigateur introuvable.
+- Vérifié automatiquement : résolution des trois modes, refus d’un nom de profil piégeux, copie réelle d’un faux profil Chrome (cookies présents dans la copie, source intacte), refus d’écrire dans le dossier navigateur d’origine, `/health` expose le profil effectif, dashboard et jeton anti-CSRF inchangés.
+- Non vérifié : ouverture effective de Chrome/Edge avec un vrai profil (aucun navigateur dans l’environnement), comportement d’un profil verrouillé par une instance réellement active, validité des cookies copiés sur les sites fournisseurs.
+- Limite documentée : Chrome lancé sans indicateur d’automatisation n’expose aucun canal de contrôle; le gateway ne peut pas s’attacher à une fenêtre déjà ouverte.

@@ -1,8 +1,73 @@
 import path from 'node:path';
 import os from 'node:os';
-import { access, mkdir } from 'node:fs/promises';
+import { access, cp, mkdir, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { chromium } from 'playwright-core';
+
+
+// The dedicated profile keeps its own cookie jar, so existing Chrome/Edge sessions are
+// invisible to it. When a profile mode is requested we briefly reuse the *real* profile
+// directory so the site sessions the user already has are the ones being used.
+export const PROFILE_MODES = ['isolated', 'chrome', 'edge'];
+
+function browserRoots(env = process.env) {
+  // Explicit overrides first: useful for portable Chrome, custom installs, and tests.
+  if (env.HERMES_CHROME_USER_DATA || env.HERMES_EDGE_USER_DATA) {
+    return {
+      chromeUserData: env.HERMES_CHROME_USER_DATA || '',
+      edgeUserData: env.HERMES_EDGE_USER_DATA || '',
+    };
+  }
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    return {
+      edgeUserData: path.join(local, 'Microsoft', 'Edge', 'User Data'),
+      chromeUserData: path.join(local, 'Google', 'Chrome', 'User Data'),
+    };
+  }
+  if (process.platform === 'darwin') {
+    return {
+      edgeUserData: path.join(os.homedir(), 'Library', 'Application Support', 'Microsoft Edge'),
+      chromeUserData: path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome'),
+    };
+  }
+  return {
+    edgeUserData: path.join(os.homedir(), '.config', 'microsoft-edge'),
+    chromeUserData: path.join(os.homedir(), '.config', 'google-chrome'),
+  };
+}
+
+const PROFILE_NAME_PATTERN = /^(Default|Profile \d+)$/;
+
+function profileName(value) {
+  return typeof value === 'string' && PROFILE_NAME_PATTERN.test(value) ? value : 'Default';
+}
+
+export async function resolveProfilePlan({ mode = 'isolated', profile = 'Default', hermesHome, env = process.env }) {
+  if (!PROFILE_MODES.includes(mode)) throw new Error(`Mode de profil inconnu : ${mode}. Utilise isolated, chrome ou edge.`);
+  const isolatedDir = path.join(hermesHome, 'browser-sessions');
+  if (mode === 'isolated') return { mode, userDataDir: isolatedDir, profileDirectory: undefined, isolated: true, browserLabel: 'profil dédié' };
+  const roots = browserRoots(env);
+  const userDataDir = mode === 'edge' ? roots.edgeUserData : roots.chromeUserData;
+  const browserLabel = mode === 'edge' ? 'Microsoft Edge' : 'Google Chrome';
+  const directory = profileName(profile);
+  if (env.HERMES_PROFILE_SNAPSHOT === '0') {
+    return { mode, userDataDir, profileDirectory: directory, isolated: false, browserLabel, backupDir: undefined };
+  }
+  // A real browser profile cannot be opened twice: Chrome refuses to run on a profile that
+  // another process holds. Copying (not moving) the profile keeps the user's browser intact.
+  const backupDir = path.join(isolatedDir, 'profile-backup', mode);
+  await mkdir(isolatedDir, { recursive: true });
+  await rm(backupDir, { recursive: true, force: true });
+  await mkdir(backupDir, { recursive: true });
+  // Only the cookie/profile store is copied; Chrome's own running-state files are skipped.
+  for (const name of ['Local State', directory]) {
+    try {
+      await cp(path.join(userDataDir, name), path.join(backupDir, name), { recursive: true, force: true, errorOnExist: false });
+    } catch { /* missing or locked files must not block the session */ }
+  }
+  return { mode, userDataDir: backupDir, profileDirectory: directory, isolated: false, browserLabel, backupDir };
+}
 
 const eventTypes = new Set(['WEB_LLM_CHUNK', 'WEB_LLM_DONE', 'WEB_LLM_ERROR', 'WEB_LLM_METADATA']);
 
@@ -74,9 +139,12 @@ async function findBrowserExecutable() {
 }
 
 export class BrowserSessions {
-  constructor({ hermesHome, providers }) {
+  constructor({ hermesHome, providers, profileMode = 'isolated', profileName: profile = 'Default' }) {
     this.hermesHome = hermesHome;
     this.providers = providers;
+    this.profileMode = profileMode;
+    this.profileName = profile;
+    this.plan = undefined;
     this.context = undefined;
     this.pages = new Map();
     this.active = new Map();
@@ -88,15 +156,17 @@ export class BrowserSessions {
     if (this.context) return this.context;
     if (this.launchPromise) return this.launchPromise;
     this.launchPromise = (async () => {
-      const userDataDir = path.join(this.hermesHome, 'browser-sessions');
-      await mkdir(userDataDir, { recursive: true });
+      this.plan = await resolveProfilePlan({ mode: this.profileMode, profile: this.profileName, hermesHome: this.hermesHome });
+      await mkdir(this.plan.userDataDir, { recursive: true });
       const executablePath = await findBrowserExecutable();
+      const args = ['--no-first-run', '--no-default-browser-check'];
+      if (this.plan.profileDirectory) args.push(`--profile-directory=${this.plan.profileDirectory}`);
       let context;
       try {
-        context = await chromium.launchPersistentContext(userDataDir, {
+        context = await chromium.launchPersistentContext(this.plan.userDataDir, {
           headless: false,
           ...(executablePath ? { executablePath } : { channel: process.platform === 'linux' ? 'chromium' : 'chrome' }),
-          args: ['--no-first-run', '--no-default-browser-check'],
+          args,
           viewport: null,
         });
       } catch (error) {
@@ -104,6 +174,9 @@ export class BrowserSessions {
         const message = String(error?.message || error);
         if (/Executable doesn.t exist|is not found|no such file/i.test(message)) {
           throw new Error('Chrome ou Edge est introuvable. Installe Google Chrome ou Microsoft Edge, ou définis HERMES_BROWSER_EXECUTABLE avec le chemin complet du navigateur, puis relance npm run gateway.');
+        }
+        if (/ProcessSingleton|profile.*in use|SingletonLock|already running/i.test(message)) {
+          throw new Error(`Le profil ${this.profileMode === 'edge' ? 'Edge' : 'Chrome'} « ${this.profileName} » semble verrouillé par un autre processus. Ferme complètement Chrome/Edge (y compris dans la zone de notification), puis réessaie.`);
         }
         throw new Error(`Ouverture du navigateur dédié impossible : ${message.split('\n')[0]}`);
       }
@@ -166,6 +239,13 @@ export class BrowserSessions {
     await page.bringToFront();
     console.log(`[session] Fenêtre ${plugin.definition.id} ouverte sur ${plugin.definition.loginUrl}`);
     return { id: providerId, url: plugin.definition.loginUrl };
+  }
+
+  describeProfile() {
+    if (this.plan) return { mode: this.profileMode, profile: this.profileName, browser: this.plan.browserLabel, isolated: this.plan.isolated };
+    // Report the configured intent even before the browser starts, without touching a profile.
+    const label = this.profileMode === 'edge' ? 'Microsoft Edge' : this.profileMode === 'chrome' ? 'Google Chrome' : 'profil dédié';
+    return { mode: this.profileMode, profile: this.profileName, browser: label, isolated: this.profileMode === 'isolated' };
   }
 
   async statuses() {
@@ -273,5 +353,6 @@ export class BrowserSessions {
     const context = this.context;
     this.context = undefined;
     if (context) await context.close().catch(() => undefined);
+    // The copied profile keeps the user's refreshed cookies for the next run.
   }
 }

@@ -24,14 +24,24 @@ const providers = new Map([...plugins].map(([id, plugin]) => [id, {
   ...plugin,
   pageHandler: plugin.contentFetchHandler ?? mainWorldFetch,
 }]));
-const GATEWAY_VERSION = '0.4.0';
+const GATEWAY_VERSION = '0.5.0';
 const DEFAULT_PORT = Number(process.env.HERMEXTENT_GATEWAY_PORT || 20128);
 const HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ACTIVE_REQUESTS = 8;
 const activeRequests = new Set();
 const home = path.resolve(process.env.HERMES_HOME || path.join(os.homedir(), '.hermes'));
-const sessions = new BrowserSessions({ hermesHome: home, providers });
+function cliFlag(name) {
+  const args = process.argv.slice(2);
+  const index = args.findIndex(arg => arg === `--${name}`);
+  if (index !== -1 && args[index + 1]) return args[index + 1];
+  const inline = args.find(arg => arg.startsWith(`--${name}=`));
+  return inline ? inline.slice(name.length + 3) : undefined;
+}
+const REQUESTED_PROFILE = String(cliFlag('profile') ?? process.env.HERMES_BROWSER_PROFILE ?? 'isolated').toLowerCase();
+const PROFILE_MODE = ['chrome', 'edge', 'isolated'].includes(REQUESTED_PROFILE) ? REQUESTED_PROFILE : 'isolated';
+const PROFILE_NAME = String(cliFlag('profile-name') ?? process.env.HERMES_BROWSER_PROFILE_NAME ?? 'Default');
+const sessions = new BrowserSessions({ hermesHome: home, providers, profileMode: PROFILE_MODE, profileName: PROFILE_NAME });
 const bridgeToken = await loadOrCreateToken(path.join(home, '.env'));
 
 async function loadOrCreateToken(envPath) {
@@ -359,7 +369,9 @@ function localUiHtml() {
   }).join('');
   return `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="hermes-ui-token" content="${uiToken}"><title>Hermes Web Gateway</title><style>
     :root{color-scheme:dark;font:15px system-ui;background:#0b1020;color:#e8edf8}body{max-width:850px;margin:48px auto;padding:0 20px}h1{font-size:28px;margin-bottom:8px}p{color:#aab6cc;line-height:1.5}.hint{padding:14px 16px;border:1px solid #293650;border-radius:12px;background:#111a2d;margin:22px 0}article{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:15px 0;border-bottom:1px solid #24304a}small{display:block;color:#96a7c4;margin-top:5px}button{border:0;border-radius:8px;padding:10px 14px;background:#6f8cff;color:#081126;font-weight:700;cursor:pointer}button:hover{background:#91a6ff}.status{font-size:13px;color:#9baac3}.ok{color:#63d6a0}.banner{margin:18px 0;padding:12px 14px;border-radius:10px;border:1px solid #2c3a58;background:#141e33}.banner.bad{border-color:#7a3040;background:#2a1420;color:#ffb4c0}.banner.good{border-color:#2f6b52;background:#10241c;color:#8ff0c0}.build{font-size:12px;color:#7c8db0;vertical-align:middle}@media(max-width:650px){article{grid-template-columns:1fr auto}.status{grid-column:1/-1}}
-    </style><body><h1>Hermes Web Gateway <span class="build">v${GATEWAY_VERSION}</span></h1><p>Passerelle locale pour utiliser les sessions web connectées, sans extension Chrome et sans clé API fournisseur.</p><div class="hint"><strong>Connexion locale seulement.</strong> Le navigateur ouvert par le gateway utilise un profil séparé enregistré dans le dossier Hermes. Connecte-toi aux sites depuis cette fenêtre; les sessions sont conservées localement.</div><div id="banner" class="banner" hidden></div><section>${entries}</section><script>
+    </style><body><h1>Hermes Web Gateway <span class="build">v${GATEWAY_VERSION}</span></h1><p>Passerelle locale pour utiliser les sessions web connectées, sans extension Chrome et sans clé API fournisseur.</p><div class="hint"><strong>Connexion locale seulement.</strong> ${sessions.describeProfile().isolated
+  ? 'Le navigateur ouvert par le gateway utilise un profil séparé enregistré dans le dossier Hermes. Connecte-toi aux sites depuis cette fenêtre; les sessions sont conservées localement.'
+  : `Le gateway réutilise une copie de ton profil ${sessions.describeProfile().browser} « ${escapeHtml(sessions.describeProfile().profile)} », donc tes sites déjà connectés fonctionnent. Chrome doit être fermé pendant que le gateway travaille, et les cookies rafraîchis restent dans la copie.`}</div><div id="banner" class="banner" hidden></div><section>${entries}</section><script>
       const banner=document.getElementById('banner');
       function report(message,ok){banner.hidden=!message;banner.textContent=message||'';banner.className='banner'+(ok?' good':' bad')}
       async function refresh(){try{const r=await fetch('/api/providers');if(!r.ok)return;const items=await r.json();for(const p of items){const el=document.getElementById('s-'+p.id);if(el){el.textContent=p.authenticated?'Indice de cookie présent':(p.pageOpen?'Page ouverte — connexion à confirmer':'Aucun cookie indicateur détecté');el.className='status'+(p.authenticated?' ok':'')}}}catch{}}
@@ -380,7 +392,7 @@ const server = createServer(async (req, res) => {
     return res.end(body);
   }
   if (req.method === 'GET' && url.pathname === '/health') {
-    return sendJson(res, 200, { ok: true, version: GATEWAY_VERSION, browserStarted: Boolean(sessions.context), providerCount: providers.size, activeRequests: activeRequests.size });
+    return sendJson(res, 200, { ok: true, version: GATEWAY_VERSION, browserStarted: Boolean(sessions.context), providerCount: providers.size, activeRequests: activeRequests.size, profile: sessions.describeProfile() });
   }
   if (req.method === 'GET' && url.pathname === '/api/providers') {
     return sendJson(res, 200, await sessions.statuses());
@@ -420,6 +432,10 @@ server.listen(DEFAULT_PORT, HOST, () => {
   console.log(`Interface locale : http://${HOST}:${DEFAULT_PORT}/`);
   console.log('Ouvre l’interface, puis « Ouvrir la session web » pour chaque fournisseur souhaité.');
   console.log('Le jeton est conservé dans le profil Hermes; sa valeur n’est jamais affichée.');
+  const described = sessions.describeProfile();
+  console.log(described.isolated
+    ? 'Profil navigateur : dédié (sessions à créer dans la fenêtre du gateway).'
+    : `Profil navigateur : copie de ${described.browser} « ${described.profile} » — tes sessions existantes sont utilisées.`);
 });
 
 async function shutdown() {

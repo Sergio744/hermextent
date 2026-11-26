@@ -31,9 +31,40 @@ The local API accepts model IDs in the form `provider-id:model-id`. The current 
 - Google Chrome or Microsoft Edge installed. Playwright Core controls the installed browser; this project does not download a separate browser.
 - A user account/session on whichever provider site you want to use.
 
+## Use your existing Chrome/Edge sessions
+
+By default the gateway opens a **dedicated profile**: clean, isolated, and separate from your normal browser. That profile cannot see the sites you are already signed into.
+
+If you would rather reuse the sessions you already have, run the gateway against your real browser profile:
+
+```powershell
+npm run gateway:chrome     # copies your Chrome profile named "Default"
+npm run gateway:edge       # copies your Edge profile named "Default"
+```
+
+Or choose explicitly:
+
+```powershell
+$env:HERMES_BROWSER_PROFILE = "chrome"
+$env:HERMES_BROWSER_PROFILE_NAME = "Profile 1"   # only if you use a non-default Chrome profile
+npm run gateway
+```
+
+What happens then, and why it is a **copy**:
+
+- Chrome/Edge locks a profile while it runs, so a second process cannot open it. The gateway therefore copies `Local State` and the chosen profile folder (cookies, storage, preferences) into `%USERPROFILE%\.hermes\browser-sessions\profile-backup\<mode>` and opens that copy with `--profile-directory`.
+- Your real profile is only read, never modified, and never deleted. The copy contains your cookies, so treat the Hermes folder as private.
+- Close Chrome/Edge completely before starting a profile-mode gateway. A stale lock is reported with a clear message.
+- Sign-ins performed inside the gateway window persist in the copy for the next run, not in your everyday browser. Re-run the gateway after signing in elsewhere to refresh the copy.
+- `HERMES_PROFILE_SNAPSHOT=0` skips the copy and points the gateway at the live profile directory: only do this when Chrome/Edge is fully closed, since Chrome will otherwise refuse to start.
+- `HERMES_CHROME_USER_DATA` / `HERMES_EDGE_USER_DATA` override the detected user-data directory (portable or custom installs).
+
+There is no way to attach the gateway to an *already running* Chrome window: a browser started without automation flags exposes no control channel. The two supported routes are the dedicated profile and the copied real profile.
+
 ## Troubleshooting
 
 - **“Jeton d’interface manquant ou périmé”** — the dashboard you are looking at was loaded before the current gateway started, or it was opened through another host. Refresh `http://127.0.0.1:20128`; the anti-CSRF token changes on every gateway restart, so an old tab must be reloaded. The dashboard token is a random per-process secret, not your provider credential.
+- **The provider site opens signed out** — you are using the dedicated profile. Switch to `npm run gateway:chrome` (or `edge`) to reuse your existing sessions, after closing that browser.
 - **No browser window opens** — Chrome/Edge was not found. Install it, or set `HERMES_BROWSER_EXECUTABLE` to the full `chrome.exe`/`msedge.exe` path and restart the gateway. The gateway never downloads a browser.
 - **A provider says the session is unverified** — sign in inside the dedicated window, keep it open, then refresh the dashboard. The cookie indicator is only a heuristic.
 - **Requests fail with a provider error** — the website protocol may have changed, or the account may not have access to that model. Report the exact message; nothing is silently retried with another provider.
